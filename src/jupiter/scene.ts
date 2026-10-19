@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { LAYERS, spotAt, type LayerId } from "@/jupiter/layers";
+import { LAYERS, SPOTS, spotAt, type LayerId } from "@/jupiter/layers";
 import {
   CLOUD_FRAG,
   EARTH_FRAG,
@@ -25,6 +25,7 @@ export type SceneHooks = {
   onEarth?: (x: number, y: number, visible: boolean) => void;
   onFail?: () => void;
 };
+
 
 type MatSlot = {
   mat: THREE.ShaderMaterial;
@@ -58,7 +59,7 @@ export class JupiterScene {
   private readonly ndc = new THREE.Vector2();
   private readonly tmp = new THREE.Vector3();
   private readonly homeTarget = new THREE.Vector3();
-  private readonly sunU = { value: new THREE.Vector3(4.2, 2.6, 5.4).normalize() };
+  private readonly sunU = { value: new THREE.Vector3(5.2, 2.1, 4.6).normalize() };
   private readonly timeU = { value: 0 };
   private readonly shells: Shell[] = [];
   private readonly pickables: THREE.Mesh[] = [];
@@ -83,6 +84,18 @@ export class JupiterScene {
   private downX = 0;
   private downY = 0;
   private downT = 0;
+  private hoverLayer = -1;
+  private selectLayer = 0;
+  private accentTargets: number[] = [0, 0, 0, 0, 0];
+  private accentValues: number[] = [0, 0, 0, 0, 0];
+  private camAnim: {
+    active: boolean;
+    t: number;
+    fromPos: THREE.Vector3;
+    toPos: THREE.Vector3;
+    fromTarget: THREE.Vector3;
+    toTarget: THREE.Vector3;
+  } | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -102,7 +115,7 @@ export class JupiterScene {
     renderer.setClearColor(0x07080c, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.02;
+    renderer.toneMappingExposure = 1.08;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
     this.camera = new THREE.PerspectiveCamera(36, 1, 0.05, 220);
@@ -118,14 +131,14 @@ export class JupiterScene {
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.target.copy(this.homeTarget);
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
+    this.controls.dampingFactor = 0.065;
     this.controls.enablePan = false;
     this.controls.minDistance = 3.15;
     this.controls.maxDistance = 16;
     this.controls.minPolarAngle = 0.08;
     this.controls.maxPolarAngle = Math.PI - 0.08;
-    this.controls.rotateSpeed = mobile ? 0.85 : 0.7;
-    this.controls.zoomSpeed = 0.7;
+    this.controls.rotateSpeed = mobile ? 0.95 : 0.82;
+    this.controls.zoomSpeed = 0.9;
 
     this.timer.connect(document);
     this.build();
@@ -141,25 +154,33 @@ export class JupiterScene {
       this.downY = e.clientY;
       this.downT = performance.now();
       this.userMoved = true;
+      this.camAnim = null;
+      this.canvas.style.cursor = "grabbing";
     };
     this.onPointerMove = (e) => {
       const hit = this.hitTest(e.clientX, e.clientY);
+      this.hoverLayer = hit ? hit.layer : -1;
+      this.canvas.style.cursor = hit ? "pointer" : "grab";
       this.hooks.onHover?.(hit, e.clientX, e.clientY);
     };
     this.onPointerUp = (e) => {
+      this.canvas.style.cursor = this.hoverLayer >= 0 ? "pointer" : "grab";
       const dist = Math.hypot(e.clientX - this.downX, e.clientY - this.downY);
-      if (dist < 8 && performance.now() - this.downT < 450) {
+      if (dist < 10 && performance.now() - this.downT < 500) {
         const hit = this.hitTest(e.clientX, e.clientY);
         if (hit) this.hooks.onPick?.(hit);
       }
     };
     this.onPointerLeave = () => {
+      this.hoverLayer = -1;
+      this.canvas.style.cursor = "grab";
       this.hooks.onHover?.(null, 0, 0);
     };
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointermove", this.onPointerMove);
     canvas.addEventListener("pointerup", this.onPointerUp);
     canvas.addEventListener("pointerleave", this.onPointerLeave);
+    canvas.style.cursor = "grab";
 
     this.resizeObs = new ResizeObserver(() => this.resize());
     this.resizeObs.observe(canvas);
@@ -176,6 +197,41 @@ export class JupiterScene {
   setReduceMotion(reduce: boolean): void {
     this.reduce = reduce;
     if (reduce) this.introT = 1;
+  }
+
+  /** Emphasize the selected layer in the notes / chip list. */
+  setSelected(layer: number): void {
+    this.selectLayer = THREE.MathUtils.clamp(Math.round(layer), 0, 4);
+  }
+
+  /**
+   * Gently orbit so a named storm (e.g. Great Red Spot) faces the camera.
+   * Keeps current distance; only rotates around the planet.
+   */
+  focusFeature(name: string): void {
+    const spot = SPOTS.find((s) => s.name === name);
+    if (!spot) return;
+    this.userMoved = true;
+    const dist = this.camera.position.distanceTo(this.controls.target);
+    const r = Math.max(dist, this.controls.minDistance + 0.05);
+    // Spot lon: 0 at +X, π/2 toward +Z — place camera looking at that longitude
+    const elev = THREE.MathUtils.clamp(spot.lat * 0.85 + 0.12, -0.55, 0.55);
+    const toPos = new THREE.Vector3(
+      r * Math.cos(elev) * Math.cos(spot.lon),
+      r * Math.sin(elev),
+      r * Math.cos(elev) * Math.sin(spot.lon),
+    );
+    const toTarget = this.homeTarget.clone();
+    // Nudge target slightly toward the storm for framing
+    toTarget.y += spot.lat * 0.35;
+    this.camAnim = {
+      active: true,
+      t: 0,
+      fromPos: this.camera.position.clone(),
+      toPos,
+      fromTarget: this.controls.target.clone(),
+      toTarget,
+    };
   }
 
   dispose(): void {
@@ -225,6 +281,7 @@ export class JupiterScene {
         uTime: this.timeU,
         uSun: this.sunU,
         uOpacity: { value: 1 },
+        uAccent: { value: 0 },
         uDisp: { value: opts.disp ?? 0 },
         uRelief: { value: opts.relief ?? 0 },
         ...extras,
@@ -291,8 +348,8 @@ export class JupiterScene {
       canPeel: boolean;
       order: number;
     }> = [
-      { index: 0, radius: OUTER, mat: cloudsMat, segs: [192, 144], canPeel: true, order: 0 },
-      { index: 1, radius: 2.02, mat: gasMat, segs: [80, 56], canPeel: true, order: 1 },
+      { index: 0, radius: OUTER, mat: cloudsMat, segs: [224, 160], canPeel: true, order: 0 },
+      { index: 1, radius: 2.02, mat: gasMat, segs: [96, 64], canPeel: true, order: 1 },
       { index: 2, radius: 1.66, mat: metalMat, segs: [80, 56], canPeel: true, order: 2 },
       { index: 3, radius: 1.02, mat: fuzzyMat, segs: [64, 48], canPeel: true, order: 4 },
     ];
@@ -546,25 +603,48 @@ export class JupiterScene {
     }
     this.controls.update();
 
-    const lambda = this.reduce ? 28 : 4.6;
+    // Camera feature focus animation
+    if (this.camAnim?.active) {
+      const anim = this.camAnim;
+      anim.t = Math.min(1, anim.t + dt / 0.85);
+      const e = 1 - (1 - anim.t) ** 3;
+      this.camera.position.lerpVectors(anim.fromPos, anim.toPos, e);
+      this.controls.target.lerpVectors(anim.fromTarget, anim.toTarget, e);
+      if (anim.t >= 1) anim.active = false;
+    }
+
+    const lambda = this.reduce ? 28 : 5.4;
     for (const shell of this.shells) {
       const target = shell.canPeel ? THREE.MathUtils.clamp(this.focus - shell.index, 0, 1) : 0;
       if (this.reduce) shell.peel = target;
       else shell.peel += (target - shell.peel) * (1 - Math.exp(-lambda * dt));
-      if (Math.abs(shell.peel - target) < 0.0015) shell.peel = target;
+      if (Math.abs(shell.peel - target) < 0.0012) shell.peel = target;
 
+      // Ease peel open so hemispheres read clearly without snapping
       const open = shell.peel;
-      const ang = open * 1.18;
+      const eased = open * open * (3 - 2 * open);
+      const ang = eased * 1.22;
       shell.pivots.forEach((pivot, i) => {
         const side = i % 2 === 0 ? 1 : -1;
         pivot.rotation.y = side * ang;
-        const s = 1 + open * 0.07;
+        const s = 1 + eased * 0.08;
         pivot.scale.setScalar(s);
       });
-      const fade = smoothstep(0.58, 1, open);
+      const fade = smoothstep(0.55, 1, open);
       const opacity = 1 - fade;
+      // Hover / select accent targets
+      const isHover = this.hoverLayer === shell.index;
+      const isSelect = this.selectLayer === shell.index;
+      let accentT = 0;
+      if (isSelect) accentT = 0.72;
+      if (isHover && open < 0.85) accentT = Math.max(accentT, 1);
+      this.accentTargets[shell.index] = accentT;
+      const ai = shell.index;
+      this.accentValues[ai] += (this.accentTargets[ai]! - this.accentValues[ai]!) * (1 - Math.exp(-(this.reduce ? 30 : 10) * dt));
+      const accent = this.accentValues[ai]!;
       for (const slot of shell.slots) {
         slot.mat.uniforms.uOpacity!.value = slot.base * opacity;
+        if (slot.mat.uniforms.uAccent) slot.mat.uniforms.uAccent.value = accent;
         if (!slot.alwaysTransparent) {
           const transparent = opacity < 0.985;
           if (slot.mat.transparent !== transparent) {

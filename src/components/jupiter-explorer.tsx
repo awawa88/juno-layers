@@ -14,6 +14,7 @@ export function JupiterExplorer() {
   const [selected, setSelected] = useState(0);
   const [notes, setNotes] = useState(false);
   const [tip, setTip] = useState<PickInfo | null>(null);
+  const [inspect, setInspect] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [lang, setLang] = useLang();
   const copy = uiText(lang);
@@ -23,6 +24,10 @@ export function JupiterExplorer() {
     focusRef.current = focus;
     sceneRef.current?.setFocus(focus);
   }, [focus]);
+
+  useEffect(() => {
+    sceneRef.current?.setSelected(selected);
+  }, [selected]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -60,14 +65,25 @@ export function JupiterExplorer() {
         scene = new mod.JupiterScene(canvasRef.current, {
           onHover: showTip,
           onPick: (info) => {
+            // Tap a named storm → inspect (don't peel away the clouds)
+            if (info.feature) {
+              setSelected(info.layer);
+              setInspect(info.feature);
+              setNotes(true);
+              scene?.setSelected(info.layer);
+              scene?.focusFeature(info.feature);
+              return;
+            }
             const current = focusRef.current;
             if (info.layer < 4 && current < info.layer + 0.98) {
               const next = info.layer + 1;
               focusRef.current = next;
               setFocus(next);
               setSelected(next);
+              setInspect(null);
             } else {
               setSelected(info.layer);
+              setInspect(null);
             }
           },
           onEarth: (x, y, visible) => {
@@ -80,6 +96,7 @@ export function JupiterExplorer() {
           onFail: () => setFailed(true),
         });
         scene.setFocus(focusRef.current);
+        scene.setSelected(0);
         scene.setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
         sceneRef.current = scene;
         scene.start();
@@ -94,6 +111,7 @@ export function JupiterExplorer() {
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (event.key === "ArrowRight" || event.key === "ArrowDown") {
         event.preventDefault();
+        setInspect(null);
         setFocus((current) => {
           const next = Math.min(4, Math.floor(current + 0.001) + 1);
           setSelected(next);
@@ -101,6 +119,7 @@ export function JupiterExplorer() {
         });
       } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
         event.preventDefault();
+        setInspect(null);
         setFocus((current) => {
           const next = Math.max(0, Math.ceil(current - 0.001) - 1);
           setSelected(next);
@@ -108,8 +127,22 @@ export function JupiterExplorer() {
         });
       } else if (event.key >= "1" && event.key <= "5") {
         const next = Number(event.key) - 1;
+        setInspect(null);
         setFocus(next);
         setSelected(next);
+      } else if (event.key === " " || event.code === "Space") {
+        event.preventDefault();
+        setInspect(null);
+        setFocus((current) => {
+          const next = Math.min(4, Math.floor(current + 0.001) + 1);
+          setSelected(next);
+          return next;
+        });
+      } else if (event.key === "r" || event.key === "R") {
+        event.preventDefault();
+        setInspect(null);
+        setFocus(0);
+        setSelected(0);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -131,12 +164,28 @@ export function JupiterExplorer() {
     focusRef.current = clamped;
     setFocus(clamped);
     setSelected(clamped);
+    setInspect(null);
+  }
+
+  function inspectSpot(name: string) {
+    setInspect(name);
+    setSelected(0);
+    // Stay on clouds so the storm is visible
+    if (focus > 0.15) {
+      focusRef.current = 0;
+      setFocus(0);
+    }
+    setNotes(true);
+    sceneRef.current?.setSelected(0);
+    sceneRef.current?.focusFeature(name);
   }
 
   const tipSpot = tip?.feature ? SPOTS.find((spot) => spot.name === tip.feature) : null;
   const translatedSpot = tipSpot ? spotText(lang, tipSpot.name) : null;
   const tipTitle = translatedSpot?.name ?? (tip ? layerText(lang, tip.layer).name : "");
   const tipBody = translatedSpot?.blurb ?? (tip ? layerText(lang, tip.layer).summary : "");
+
+  const inspected = inspect ? spotText(lang, inspect) : null;
 
   return (
     <div className="stage">
@@ -151,7 +200,9 @@ export function JupiterExplorer() {
                   ? "text-xs font-medium tracking-widest text-faint uppercase"
                   : "text-xs font-medium tracking-wide text-faint"
               }
-            >{copy.kicker}</p>
+            >
+              {copy.kicker}
+            </p>
             <h1 className="mt-1 font-display text-3xl leading-none font-medium tracking-tight md:text-4xl">
               {copy.title}
             </h1>
@@ -166,6 +217,8 @@ export function JupiterExplorer() {
           </div>
         </div>
         <p className="mt-2 max-w-sm text-sm leading-snug text-muted">{copy.lede}</p>
+        <p className="hint-line mt-2 max-w-md text-xs leading-snug text-faint">{copy.hint}</p>
+        <p className="hint-keys mt-1 hidden max-w-md text-xs leading-snug text-faint md:block">{copy.keysHint}</p>
         <Link to="/faq" className="faq-link">
           {copy.faq}
         </Link>
@@ -178,6 +231,9 @@ export function JupiterExplorer() {
       <div ref={tipRef} className="tip" role="tooltip">
         <p className="text-sm font-medium text-fg">{tipTitle}</p>
         {tipBody ? <p className="mt-1 text-xs leading-snug text-muted">{tipBody}</p> : null}
+        {tip?.feature ? (
+          <p className="mt-1 text-[0.65rem] tracking-wide text-faint uppercase">{copy.orbitHint}</p>
+        ) : null}
       </div>
 
       <aside className={notes ? "sheet is-open" : "sheet"} aria-label={copy.controls}>
@@ -198,6 +254,23 @@ export function JupiterExplorer() {
                   <span className="block text-sm font-medium">{text.name}</span>
                   <span className="hidden text-xs text-faint md:block">{text.radiusLabel}</span>
                 </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="storm-row mt-2" role="group" aria-label={copy.inspectLabel}>
+          {SPOTS.map((spot) => {
+            const label = spotText(lang, spot.name)?.name ?? spot.name;
+            return (
+              <button
+                key={spot.name}
+                type="button"
+                className="storm-chip"
+                aria-pressed={inspect === spot.name}
+                onClick={() => inspectSpot(spot.name)}
+              >
+                {label}
               </button>
             );
           })}
@@ -236,6 +309,7 @@ export function JupiterExplorer() {
             aria-label={copy.depth}
             onChange={(event) => {
               const value = Number(event.target.value);
+              setInspect(null);
               setFocus(value);
               setSelected(Math.min(4, Math.max(0, Math.round(value))));
             }}
@@ -255,6 +329,16 @@ export function JupiterExplorer() {
         <div className="notes mt-3 border-t border-line pt-3">
           {failed ? (
             <p className="text-sm leading-relaxed text-muted">{copy.webgl}</p>
+          ) : inspected ? (
+            <article aria-live="polite">
+              <p className="text-xs text-faint">{copy.inspectLabel}</p>
+              <h2 className="mt-1 font-display text-2xl leading-tight font-medium">{inspected.name}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-fg">{inspected.blurb}</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{layerText(lang, 0).detail}</p>
+              <button type="button" className="btn btn-ghost mt-3" onClick={() => setInspect(null)}>
+                {copy.clearInspect}
+              </button>
+            </article>
           ) : (
             <article aria-live="polite">
               <p className="text-xs text-faint">{layer.radiusLabel}</p>
