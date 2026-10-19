@@ -35,6 +35,11 @@ export type UiText = {
   faqTitle: string;
   faqLede: string;
   back: string;
+  hint: string;
+  keysHint: string;
+  inspectLabel: string;
+  clearInspect: string;
+  orbitHint: string;
 };
 
 const ZH_LAYERS: Record<LayerId, LayerText> = {
@@ -115,7 +120,7 @@ const UI: Record<Lang, UiText> = {
     aboutLayer: "About this layer",
     junoLabel: "Juno. ",
     footnote:
-      "Tap the planet to peel the shell you touch. Drag to orbit, pinch or scroll to zoom. Sizes are exaggerated so each zone stays visible — real cloud decks are a thin skin, and the interior boundaries are gradual. Not a numerical model.",
+      "Tap a shell to peel it; tap the Great Red Spot (or another storm) to inspect it. Drag to orbit, pinch or scroll to zoom. Sizes are exaggerated so each zone stays visible — real cloud decks are a thin skin, and the interior boundaries are gradual. Not a numerical model.",
     webgl: "This view needs WebGL, which isn’t available right now.",
     canvas: "Interactive Jupiter. Drag to orbit. Tap a shell to peel it.",
     controls: "Layer controls",
@@ -124,6 +129,11 @@ const UI: Record<Lang, UiText> = {
     faqTitle: "FAQ",
     faqLede: "Short answers about the model, and about Jupiter.",
     back: "Back to Jupiter",
+    hint: "Drag to orbit · Scroll to zoom · Tap a shell to peel",
+    keysHint: "Keys: ← → peel · 1–5 jump · R restore · Space peel deeper",
+    inspectLabel: "Storm",
+    clearInspect: "Clear",
+    orbitHint: "Grab and drag the planet",
   },
   "zh-Hant": {
     language: "語言",
@@ -139,7 +149,7 @@ const UI: Record<Lang, UiText> = {
     aboutLayer: "這一層",
     junoLabel: "朱諾號。",
     footnote:
-      "點按行星，可剝開你碰到的那一層。拖曳以環繞，雙指或滾輪可縮放。各層尺寸有所誇大，好讓每一區都看得見——真實的雲層只是薄薄一層皮，內部邊界也是漸漸過渡的。這不是數值模型。",
+      "點按外殼可剝開；點按大紅斑或其他風暴可檢視。拖曳以環繞，雙指或滾輪可縮放。各層尺寸有所誇大，好讓每一區都看得見——真實的雲層只是薄薄一層皮，內部邊界也是漸漸過渡的。這不是數值模型。",
     webgl: "這個畫面需要 WebGL，目前無法使用。",
     canvas: "可互動的木星。拖曳以環繞，點按外殼即可剝開。",
     controls: "層次控制",
@@ -148,6 +158,11 @@ const UI: Record<Lang, UiText> = {
     faqTitle: "常見問題",
     faqLede: "關於這個模型，以及木星本身。",
     back: "回到木星",
+    hint: "拖曳環繞 · 滾輪縮放 · 點按外殼剝開",
+    keysHint: "鍵盤：← → 剝層 · 1–5 跳層 · R 復原 · 空白鍵再剝",
+    inspectLabel: "風暴",
+    clearInspect: "清除",
+    orbitHint: "抓住行星拖曳",
   },
 };
 
@@ -210,7 +225,7 @@ const FAQ: Record<Lang, readonly FaqItem[]> = {
     },
     {
       q: "How do I look inside?",
-      a: "Tap a shell, pick a layer, or drag the peel slider. Drag to orbit, and pinch or scroll to zoom. Restore puts the clouds back. On a keyboard, the arrow keys move one layer at a time, and the number keys 1–5 jump straight to a layer.",
+      a: "Tap a shell, pick a layer, or drag the peel slider. Tap the Great Red Spot (or a storm chip) to inspect it and swing the camera over. Drag to orbit, and pinch or scroll to zoom. Restore puts the clouds back. On a keyboard: arrows peel, 1–5 jump, Space peels deeper, R restores.",
     },
     {
       q: "Why is Earth tiny, and the layers so thick?",
@@ -260,7 +275,7 @@ const FAQ: Record<Lang, readonly FaqItem[]> = {
     },
     {
       q: "怎樣看裡面？",
-      a: "點按外殼、選擇一層，或拖動剝開的滑桿。拖曳可環繞，雙指或滾輪可縮放。按復原會把雲層蓋回去。用鍵盤時，方向鍵每次移動一層，數字鍵 1 到 5 直接跳到某一層。",
+      a: "點按外殼、選擇一層，或拖動剝開的滑桿。點按大紅斑（或風暴按鈕）可檢視並把鏡頭轉過去。拖曳可環繞，雙指或滾輪可縮放。按復原會把雲層蓋回去。鍵盤：方向鍵剝層，1 到 5 跳層，空白鍵再剝，R 復原。",
     },
     {
       q: "為什麼地球那麼小，內層卻那麼厚？",
