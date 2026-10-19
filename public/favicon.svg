@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Juno Layers">
+  <rect width="32" height="32" rx="7" fill="#07080c"/>
+  <defs>
+    <clipPath id="planet">
+      <circle cx="16" cy="16.5" r="11"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#planet)">
+    <rect x="5" y="5" width="22" height="23" fill="#c47a3a"/>
+    <rect x="5" y="8" width="22" height="2.4" fill="#f0e2c4"/>
+    <rect x="5" y="12.2" width="22" height="1.6" fill="#e8c9a0"/>
+    <rect x="5" y="16.4" width="22" height="2.6" fill="#f3efe6"/>
+    <rect x="5" y="21" width="22" height="2.2" fill="#e07a45"/>
+    <rect x="5" y="25.2" width="22" height="1.8" fill="#f0e2c4"/>
+    <ellipse cx="20.2" cy="19.2" rx="2.3" ry="1.45" fill="#8e3a22"/>
+  </g>
+</svg>
