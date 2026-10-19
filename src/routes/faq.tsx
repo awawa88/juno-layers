@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { faqItems, uiText, useLang } from "@/jupiter/i18n";
+import { LangSelect } from "@/components/lang-select";
+import { faqItems, isLatin, uiText, useLang } from "@/jupiter/i18n";
 
 export const Route = createFileRoute("/faq")({
   head: () => ({
@@ -9,7 +10,7 @@ export const Route = createFileRoute("/faq")({
       {
         name: "description",
         content:
-          "Questions about this Jupiter model: the dilute core, metallic hydrogen, the Great Red Spot, and what Juno actually measured.",
+          "Short answers about Jupiter: the Great Red Spot, metallic hydrogen, the dilute core, and what NASA’s Juno mission measured.",
       },
     ],
   }),
@@ -31,19 +32,12 @@ function FaqPage() {
         <Link to="/" className="faq-back">
           {copy.back}
         </Link>
-        <div className="lang" role="group" aria-label={copy.language}>
-          <button type="button" aria-pressed={lang === "en"} onClick={() => setLang("en")}>
-            EN
-          </button>
-          <button type="button" aria-pressed={lang === "zh-Hant"} onClick={() => setLang("zh-Hant")}>
-            繁
-          </button>
-        </div>
+        <LangSelect lang={lang} label={copy.language} onChange={setLang} />
       </header>
       <div className="faq-body">
         <p
           className={
-            lang === "en"
+            isLatin(lang)
               ? "text-xs font-medium tracking-widest text-faint uppercase"
               : "text-xs font-medium tracking-wide text-faint"
           }
