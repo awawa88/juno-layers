@@ -15,3 +15,13 @@ Source: NASA Scientific Visualization Studio CGI Moon Kit (https://svs.gsfc.nasa
 derived from LROC Wide Angle Camera Hapke-normalized mosaics with polar fill from LOLA albedo.
 Credit: NASA / Goddard Space Flight Center / SVS / ASU LROC. Public domain.
 
+
+# Jupiter textures
+
+`jupiter-opal.webp` — Hubble OPAL global Jupiter map (Rotation 1, 19 Jan 2015), resized to 2048×1024 WebP
+and rolled in longitude so the Great Red Spot aligns with the app's geometric GRS pick.
+
+Source: NASA Science asset (https://science.nasa.gov/asset/hubble/jupiter-global-map-from-hubble-opal-data-rotation-1/),
+derived from HST WFC3/UVIS OPAL proposal 13937. Direct download used:
+https://assets.science.nasa.gov/dynamicimage/assets/science/missions/hubble/releases/2015/10/STScI-01EVT28CB7CN0CEYRV56WP1S6A.tif?w=3600&h=1598&fit=clip&crop=faces%2Cfocalpoint
+Credit: NASA, ESA, A. Simon (GSFC), M. Wong (UC Berkeley), and G. Orton (JPL-Caltech).

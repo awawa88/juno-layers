@@ -120,7 +120,7 @@ void main() {
       exp(-pow(abs(deg - 39.5) / 2.8, 2.0)) * 0.4;
     // Keep vertex relief very subtle so the limb silhouette remains a crisp astronomical ellipse
     float h = (0.5 - belts) * 0.0032;
-    float grsLonNow = ${GRS_LON} - uTime * 0.0045;
+    float grsLonNow = ${GRS_LON};
     float dlon = atan(sin(lon - grsLonNow), cos(lon - grsLonNow));
     float dlat = lat - ${GRS_LAT};
     float e = length(vec2(dlon / ${GRS_RX}, dlat / ${GRS_RY}));
@@ -138,111 +138,8 @@ void main() {
 `;
 
 function spotBlock(): string {
-  return SPOTS.map((spot) => {
-    const lon = spot.lon.toFixed(5);
-    const lat = spot.lat.toFixed(5);
-    const rx = spot.rx.toFixed(5);
-    const ry = spot.ry.toFixed(5);
-    if (spot.kind === "grs") {
-      return `
-        {
-          // Use tighter visual aspect ratio matching Hubble GRS (~0.32x0.165 rad) inside the hit ellipse
-          // GRS drifts slowly westward relative to System III and counter-rotates internally
-          float spotLon = ${lon} - uTime * 0.0045;
-          float dlon = wrapLon(lon - spotLon);
-          float dlat = lat - ${lat};
-          vec2 q = vec2(dlon / (${rx} * 0.68), dlat / (${ry} * 0.72));
-          float e = length(q);
-          if (e < 2.2) {
-            float ang = atan(q.y, q.x);
-            // Differential counter-clockwise angular velocity: faster in the high-velocity collar ring
-            float spinRate = mix(0.28, 0.52, smoothstep(0.15, 0.85, e));
-            float rotAng = ang + uTime * spinRate * (1.0 - smoothstep(0.95, 1.45, e));
-            vec2 qRot = vec2(cos(rotAng), sin(rotAng)) * e;
-
-            // Subtle organic breathing & oscillation of the oval contour
-            float wobble = (noise(vec3(cos(ang) * 2.2, sin(ang) * 2.2, uTime * 0.14)) - 0.5) * 0.085;
-            float ew = e + wobble;
-
-            // Counter-clockwise anticyclonic spiral filaments inside the GRS
-            float spiral = rotAng * 2.0 - pow(max(ew, 0.08), 0.85) * 9.5;
-            float sNoise = fbm(vec3(qRot * 3.2, uTime * 0.09));
-            float filament = 0.5 + 0.5 * sin(spiral + sNoise * 3.5);
-            float fineRing = 0.5 + 0.5 * cos(ew * 18.0 - rotAng + sNoise * 4.0);
-
-            // True-color Hubble GRS palette: deep amber-rust eye, vivid warm orange-ochre annulus,
-            // pale salmon inner rim, surrounded by a creamy-white peripheral collar & dark outer lane
-            vec3 eyeCol = vec3(0.74, 0.34, 0.14);      // darker warm rust-ochre central eye
-            vec3 bodyOrange = vec3(0.86, 0.45, 0.21);  // main vibrant ochre-orange
-            vec3 lightOchre = vec3(0.92, 0.60, 0.34);  // lighter golden-salmon swirl bands
-            vec3 paleRim = vec3(0.94, 0.84, 0.70);     // pale buff transition
-            vec3 collarWhite = vec3(0.95, 0.92, 0.85); // bright white-cream Red Spot Hollow
-            vec3 darkFrame = vec3(0.60, 0.47, 0.36);   // warm gray-brown outer shear lane
-
-            float eyeMask = 1.0 - smoothstep(0.0, 0.34, ew);
-            float ringMask = smoothstep(0.22, 0.55, ew) * (1.0 - smoothstep(0.68, 0.92, ew));
-
-            vec3 grs = mix(bodyOrange, lightOchre, filament * 0.65 + fineRing * 0.25);
-            grs = mix(grs, eyeCol, eyeMask * 0.78);
-            grs = mix(grs, bodyOrange * 0.88, ringMask * (1.0 - filament) * 0.45);
-            grs = mix(grs, paleRim, smoothstep(0.76, 0.96, ew));
-
-            // Peripheral white collar (Red Spot Hollow) and subtle dark outer shear rim
-            float vortexDisc = 1.0 - smoothstep(0.86, 1.04, ew);
-            float whiteCollar = smoothstep(0.84, 1.02, ew) * (1.0 - smoothstep(1.12, 1.48, ew));
-            // Arching dark gray-brown eyebrow over the northern/southern edge of the hollow
-            float frameLane = smoothstep(1.18, 1.42, ew) * (1.0 - smoothstep(1.48, 1.85, ew));
-
-            albedo = mix(albedo, darkFrame, frameLane * 0.62);
-            albedo = mix(albedo, collarWhite, whiteCollar * 0.88);
-            albedo = mix(albedo, grs, vortexDisc);
-
-            stormH = vortexDisc;
-            stormQ = qRot;
-            stormE = ew;
-          }
-        }
-      `;
-    }
-    if (spot.kind === "oval") {
-      return `
-        {
-          // Oval BA / southern white anticyclone drifting eastward in the STB jet
-          float spotLon = ${lon} + uTime * 0.008;
-          float dlon = wrapLon(lon - spotLon);
-          float dlat = lat - ${lat};
-          vec2 q = vec2(dlon / (${rx} * 0.75), dlat / (${ry} * 0.75));
-          float e = length(q);
-          if (e < 1.5) {
-            float ang = atan(q.y, q.x);
-            float swirl = 0.5 + 0.5 * sin(ang * 2.0 - e * 6.5 + uTime * 0.55);
-            vec3 coreCol = mix(vec3(0.92, 0.89, 0.82), vec3(0.97, 0.95, 0.90), swirl);
-            vec3 rimCol = vec3(0.62, 0.50, 0.39);
-            float collar = smoothstep(0.72, 0.96, e) * (1.0 - smoothstep(0.98, 1.35, e));
-            float disc = 1.0 - smoothstep(0.68, 0.98, e);
-            albedo = mix(albedo, rimCol, collar * 0.65);
-            albedo = mix(albedo, coreCol, disc * 0.94);
-          }
-        }
-      `;
-    }
-    return `
-      {
-        // Northern anticyclonic oval / barge feature with live rotation
-        float spotLon = ${lon} - uTime * 0.006;
-        float dlon = wrapLon(lon - spotLon);
-        float dlat = lat - ${lat};
-        vec2 q = vec2(dlon / (${rx} * 0.78), dlat / (${ry} * 0.78));
-        float e = length(q);
-        if (e < 1.4) {
-          float arm = 0.5 + 0.5 * sin(atan(q.y, q.x) * 2.0 - e * 6.0 - uTime * 0.48);
-          vec3 stormCol = mix(vec3(0.76, 0.56, 0.40), vec3(0.92, 0.84, 0.72), arm);
-          float m = 1.0 - smoothstep(0.45, 1.02, e);
-          albedo = mix(albedo, stormCol, m * 0.85);
-        }
-      }
-    `;
-  }).join("\n");
+  // Hubble OPAL photo albedo already includes GRS/ovals — skip procedural paints (no double GRS).
+  return "";
 }
 
 export const CLOUD_FRAG = /* glsl */ `
@@ -274,16 +171,13 @@ void main() {
   float lon = atan(dir.z, dir.x);
   float deg = lat * 57.2957795;
 
-  // Authentic alternating East-West zonal wind jets:
-  // Prograde (eastward) equatorial super-rotation, retrograde (westward) NEB/SEB jets,
-  // and alternating temperate jets so adjacent bands visibly shear past one another!
+  // Mild jet scalars for lightning cell IDs / relief noise only — photo UVs stay unwarped (Earth-style).
   float eqJet = exp(-pow(deg / 7.5, 2.0)) * 0.022;
   float beltRetro = -(exp(-pow((deg - 13.0) / 4.2, 2.0)) + exp(-pow((deg + 14.5) / 4.2, 2.0))) * 0.016;
   float tempJets = sin(lat * 15.5) * 0.012 + cos(lat * 26.0) * 0.007;
   float baseSpin = 0.014;
   float flow = lon + (baseSpin + eqJet + beltRetro + tempJets) * uTime + sin(lat * 15.5) * 0.03;
 
-  // Multi-scale curl-like domain warp in shader with live time evolution for boiling eddies
   float warpA = cylNoise(flow + uTime * 0.008, lat, 2.2, 16.0, 1.3 + uTime * 0.015) - 0.5;
   float warpB = cylNoise(flow - uTime * 0.012 + warpA * 0.28, lat + warpA * 0.022, 4.8, 38.0, 4.7) - 0.5;
 #if QUALITY > 0
@@ -292,30 +186,19 @@ void main() {
   float fineShear = (noise(vec3(cos(flow) * 9.5, sin(flow) * 9.5, lat * 76.0 + warpB)) - 0.5) * 0.6;
 #endif
 
-  // Keep the base texture moving smoothly with the planet's spin while dynamic shear waves ripple across the bands
-  float baseLon = lon + baseSpin * uTime + (eqJet + beltRetro + tempJets) * sin(uTime * 0.35) * 1.4;
-  float u = (baseLon + warpA * 0.022 + warpB * 0.011) / 6.28318530718 + 0.5;
-  float v = clamp(lat / 3.14159265359 + 0.5 + warpA * 0.0042 + warpB * 0.0018, 0.002, 0.998);
+  // Hubble OPAL equirectangular: straight lon/lat + textureGrad (no domain warp) so mips stay Earth-crisp.
+  // Map is pre-rolled so baked GRS lands on SPOTS[0] lon.
+  float baseLon = lon;
+  float u = lon / 6.28318530718 + 0.5;
+  float v = clamp(lat / 3.14159265359 + 0.5, 0.002, 0.998);
   float dux = dFdx(u);
   float duy = dFdy(u);
   dux -= floor(dux + 0.5);
   duy -= floor(duy + 0.5);
-  // Shrink explicit derivatives so domain warp does not force overly soft mips
-  // (modest sharpen vs Cassini/Hubble stills; keeps mip AA).
-  const float mipSharp = 0.72;
-  vec3 tex = textureGrad(
-    uMap,
-    vec2(u, v),
-    vec2(dux, dFdx(v)) * mipSharp,
-    vec2(duy, dFdy(v)) * mipSharp
-  ).rgb;
+  vec3 tex = textureGrad(uMap, vec2(u, v), vec2(dux, dFdx(v)), vec2(duy, dFdy(v))).rgb;
 
-  // Delicately modulate with high-frequency feathery filaments (no harsh contrast)
-  vec3 albedo = tex * (1.0 + fineShear * 0.08 + warpB * 0.05);
-
-  // Subtle folded convective chevrons in the SEB turbulent wake and NEB rifts that churn over time
-  float sebFold = gauss(deg, -13.5, 3.6) * smoothstep(0.16, 0.46, warpA + warpB + 0.5);
-  albedo = mix(albedo, vec3(0.93, 0.89, 0.80), sebFold * 0.24);
+  // Very light filament modulation — preserve photo edge frequency
+  vec3 albedo = tex * (1.0 + fineShear * 0.03);
 
   float stormH = 0.0;
   vec2 stormQ = vec2(0.0);

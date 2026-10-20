@@ -138,13 +138,42 @@ export function loadMoonAlbedo(): Promise<THREE.Texture> {
   return moonMapPromise;
 }
 
+/** Hubble OPAL Jupiter global map (equirectangular cloud albedo). */
+const JUPITER_CLOUD_MAP_URL = "/textures/jupiter-opal.webp";
+
+let jupiterCloudMapPromise: Promise<THREE.Texture> | null = null;
+
+/** Load the shared Jupiter cloud albedo once; ignores w/h (single lightweight asset). */
+export function loadJupiterCloudMap(): Promise<THREE.Texture> {
+  if (!jupiterCloudMapPromise) {
+    jupiterCloudMapPromise = new Promise<THREE.Texture>((resolve, reject) => {
+      new THREE.TextureLoader().load(
+        JUPITER_CLOUD_MAP_URL,
+        (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
+          tex.anisotropy = 8;
+          resolve(tex);
+        },
+        undefined,
+        (err) => {
+          jupiterCloudMapPromise = null;
+          reject(err);
+        },
+      );
+    });
+  }
+  return jupiterCloudMapPromise;
+}
+
 /**
- * Full-resolution map: Jupiter clouds stay procedural (worker/chunked);
- * Earth uses the NASA Blue Marble asset (preview stays procedural via createPlanetTexture).
- * Moon albedo is loaded separately via loadMoonAlbedo().
+ * Full-resolution map: Jupiter clouds and Earth use NASA photo assets
+ * (preview stays procedural via createPlanetTexture). Moon via loadMoonAlbedo().
  */
 export function loadPlanetTexture(kind: TextureKind, w: number, h: number): Promise<THREE.Texture> {
   if (kind === "earth") return loadEarthBlueMarble();
+  if (kind === "cloud") return loadJupiterCloudMap();
   const key = `${kind}:${w}x${h}`;
   let pixels = cache.get(key);
   if (!pixels) {
