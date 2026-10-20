@@ -1145,12 +1145,17 @@ export class JupiterScene {
       const sensor = new Ctor({ frequency, referenceFrame: "screen" });
       sensor.addEventListener("reading", () => {
         const [x, y, z, w] = sensor.quaternion;
-        // Quaternion → pitch (beta-like) / roll (gamma-like) in degrees.
+        // Quaternion → W3C Device Orientation Euler (Z-X'-Y''):
+        //   beta  = rotation about X (tip top of screen toward/away)
+        //   gamma = rotation about Y (tip left/right edge)
+        // Previous code swapped these (atan2→gamma, asin→beta), so Android-tablet ROS
+        // (preferred over DOE) put tip-top into orbitY — felt like Jupiter spinning on
+        // its polar axis instead of a camera micro-orbit. iPhone/iPad never use ROS.
         const sinr = 2 * (w * x + y * z);
         const cosr = 1 - 2 * (x * x + y * y);
-        const gamma = (Math.atan2(sinr, cosr) * 180) / Math.PI;
+        const beta = (Math.atan2(sinr, cosr) * 180) / Math.PI;
         const sinp = 2 * (w * y - z * x);
-        const beta = (Math.asin(Math.max(-1, Math.min(1, sinp))) * 180) / Math.PI;
+        const gamma = (Math.asin(Math.max(-1, Math.min(1, sinp))) * 180) / Math.PI;
         this.applyTiltDegrees(beta, gamma);
       });
       sensor.addEventListener("error", () => {
