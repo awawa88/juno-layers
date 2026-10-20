@@ -12,6 +12,8 @@ export const zhHans: Locale = {
     restore: "复原",
     autoTour: "自动导览",
     pauseTour: "暂停",
+    tilt: "倾斜",
+    tiltOff: "关闭倾斜",
     depth: "剖视深度",
     hideNotes: "收起说明",
     aboutLayer: "本层说明",

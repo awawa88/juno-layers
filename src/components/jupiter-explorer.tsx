@@ -38,6 +38,7 @@ export function JupiterExplorer() {
   const [focus, setFocus] = useState(0);
   const [selected, setSelected] = useState(0);
   const [touring, setTouring] = useState(false);
+  const [tiltOn, setTiltOn] = useState(true);
   const [viewMoved, setViewMoved] = useState(false);
   const [card, setCard] = useState<CardState>("default");
   const notes = card === "open";
@@ -188,6 +189,7 @@ export function JupiterExplorer() {
         measureFrame();
         scene.setFocus(focusRef.current);
         scene.setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+        setTiltOn(scene.isTiltEnabled());
         sceneRef.current = scene;
         scene.start();
         for (const el of [stageRef.current, sheetRef.current, hudRef.current]) {
@@ -250,6 +252,12 @@ export function JupiterExplorer() {
     focusRef.current = clamped;
     setFocus(clamped);
     setSelected(clamped);
+  }
+
+  function toggleTilt() {
+    const next = !tiltOn;
+    setTiltOn(next);
+    sceneRef.current?.setTiltEnabled(next);
   }
 
   function toggleTour() {
@@ -323,7 +331,17 @@ export function JupiterExplorer() {
               {copy.title}
             </h1>
           </div>
-          <LangSelect lang={lang} label={copy.language} onChange={setLang} />
+          <div className="hud-tools">
+            <LangSelect lang={lang} label={copy.language} onChange={setLang} />
+            <button
+              type="button"
+              className="tilt-toggle"
+              aria-pressed={tiltOn}
+              onClick={toggleTilt}
+            >
+              {tiltOn ? copy.tiltOff : copy.tilt}
+            </button>
+          </div>
         </div>
         <p className="mt-2 max-w-sm text-sm leading-snug text-muted">{copy.lede}</p>
         <nav className="hud-links">

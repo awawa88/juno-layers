@@ -243,14 +243,14 @@ void main() {
     float mu = clamp(dot(geomN, view), 0.0, 1.0);
     float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
 
-    // Soft cloud limb like OPAL photo: gradual dimming (not a dark collar, not a gray halo).
-    // Keep cloud opaque — alpha fade was causing a hard bright pop at the silhouette.
-    float limbDark = pow(mu, 0.38) * mix(0.18, 1.0, smoothstep(0.0, 0.34, mu));
+    // Mild spherical depth + soft gray rim (no dark/black collar). Glow shell softens silhouette further.
+    float limbDark = mix(0.68, 1.0, pow(smoothstep(0.0, 0.42, mu), 0.70));
     float terminator = pow(mu0, 0.75);
-
-    // Slight atmospheric Rayleigh/haze tint shift toward dusty warm-slate at low view angles
-    vec3 limbTint = mix(vec3(0.76, 0.73, 0.68), vec3(1.0), pow(mu, 0.45));
-    vec3 col = albedo * limbTint * (0.025 + 1.06 * terminator) * limbDark;
+    vec3 limbTint = mix(vec3(0.86, 0.84, 0.82), vec3(1.0), pow(mu, 0.45));
+    vec3 lit = albedo * limbTint * (0.025 + 1.06 * terminator) * limbDark;
+    float rimAmt = 1.0 - smoothstep(0.0, 0.38, mu);
+    vec3 softGray = vec3(0.36, 0.35, 0.34);
+    vec3 col = mix(lit, softGray, rimAmt * 0.48);
 
     // Occasional Juno-observed lightning flashes deep inside cyclonic belts (NEB ~ +12°, SEB ~ -14°)
     float beltZone = gauss(deg, 12.0, 3.0) + gauss(deg, -14.0, 3.0);
@@ -687,12 +687,13 @@ void main() {
   vec3 sun = normalize(uSun);
   // Back-side shell: visible fragments are the far hemisphere, whose outward normal faces away from the viewer
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  // Barely-there sunlit whisper (opacity low) — avoid any visible gray ring around the globe.
-  float fres = pow(1.0 - ndv, 5.5) * smoothstep(0.0, 0.22, ndv);
-  float sunlit = smoothstep(-0.2, 0.35, dot(n, sun));
+  // Soft gray overlay on the disc limb (FrontSide + NormalBlending, depthTest off).
+  // Pulls the hard silhouette toward soft gray, then fades into space — not a thick halo.
+  float fres = pow(1.0 - ndv, 1.6) * smoothstep(0.0, 0.70, ndv);
+  float sunlit = mix(0.75, 1.0, smoothstep(-0.30, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  vec3 col = vec3(0.90, 0.82, 0.70);
-  gl_FragColor = vec4(col, rim * 0.06);
+  vec3 col = vec3(0.36, 0.35, 0.34);
+  gl_FragColor = vec4(col, rim * 0.62);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

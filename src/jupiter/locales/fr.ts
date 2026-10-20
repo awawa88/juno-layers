@@ -12,6 +12,8 @@ export const fr: Locale = {
     restore: "Rétablir",
     autoTour: "Visite guidée",
     pauseTour: "Pause",
+    tilt: "Inclinaison",
+    tiltOff: "Désactiver l’inclinaison",
     depth: "Profondeur de coupe",
     hideNotes: "Masquer les notes",
     aboutLayer: "À propos de cette couche",

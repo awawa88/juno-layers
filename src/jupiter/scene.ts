@@ -285,6 +285,8 @@ export class JupiterScene {
   private tiltTargetY = 0;
   private tiltActive = false;
   private tiltTried = false;
+  /** User preference: device + RMB micro-tilt. Persisted in localStorage. */
+  private tiltEnabled = true;
   private tiltBaseBeta: number | null = null;
   private tiltBaseGamma: number | null = null;
   private relativeOrientationSensor: { start: () => void; stop: () => void } | null = null;
@@ -405,7 +407,7 @@ export class JupiterScene {
         this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), false);
       }
       // Desktop RMB: tiny camera-style tilt (same amplitude as device parallax).
-      if (e.button === 2 && !this.reduce) {
+      if (e.button === 2 && !this.reduce && this.tiltEnabled) {
         this.rmbTilting = true;
         this.rmbLastX = e.clientX;
         this.rmbLastY = e.clientY;
@@ -491,6 +493,7 @@ export class JupiterScene {
     }
 
     // Tilt: Android/auto attach on load; iOS permission on first *page* gesture (not Jupiter-only).
+    this.tiltEnabled = JupiterScene.readTiltPref();
     this.beginTiltParallax();
   }
 
@@ -839,7 +842,7 @@ export class JupiterScene {
 
   /** Map device pitch/roll (degrees) into the tiny planet sway targets. */
   private applyTiltDegrees(beta: number, gamma: number): void {
-    if (this.reduce || this.dead) return;
+    if (!this.tiltEnabled || this.reduce || this.dead) return;
     if (this.tiltBaseBeta == null) {
       this.tiltBaseBeta = beta;
       this.tiltBaseGamma = gamma;
@@ -950,7 +953,7 @@ export class JupiterScene {
    * page-wide gesture listener for requestPermission (Safari requirement).
    */
   private beginTiltParallax(): void {
-    if (this.reduce || this.dead || !this.deviceLikelyHasTiltSensors()) return;
+    if (!this.tiltEnabled || this.reduce || this.dead || !this.deviceLikelyHasTiltSensors()) return;
     const hasDOE = typeof DeviceOrientationEvent !== "undefined";
     const hasROS =
       typeof (window as unknown as { RelativeOrientationSensor?: unknown }).RelativeOrientationSensor !==
@@ -972,7 +975,7 @@ export class JupiterScene {
    * (any page interaction — not Jupiter-only). Android attaches with no prompt.
    */
   private async enableTiltParallax(): Promise<void> {
-    if (this.tiltTried || this.reduce || this.dead) return;
+    if (!this.tiltEnabled || this.tiltTried || this.reduce || this.dead) return;
     if (typeof window === "undefined") return;
     if (!this.deviceLikelyHasTiltSensors()) return;
 
@@ -1001,6 +1004,48 @@ export class JupiterScene {
     } catch {
       this.tiltTried = false;
       // Permission denied or unsupported — keep drag orbit; no crash.
+    }
+  }
+
+
+  private static readonly TILT_PREF_KEY = "juno-layers-tilt";
+
+  private static readTiltPref(): boolean {
+    try {
+      const v = window.localStorage.getItem(JupiterScene.TILT_PREF_KEY);
+      if (v === "0" || v === "false") return false;
+      if (v === "1" || v === "true") return true;
+    } catch {
+      /* private mode */
+    }
+    return true;
+  }
+
+  isTiltEnabled(): boolean {
+    return this.tiltEnabled;
+  }
+
+  /** Toggle device + desktop RMB micro-tilt. Persists in localStorage. */
+  setTiltEnabled(on: boolean): void {
+    if (this.tiltEnabled === on) return;
+    this.tiltEnabled = on;
+    try {
+      window.localStorage.setItem(JupiterScene.TILT_PREF_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    if (!on) {
+      this.disarmTiltPermissionGesture();
+      this.detachOrientationListeners();
+      this.tiltTried = false;
+      this.tiltActive = false;
+      this.tiltTargetX = 0;
+      this.tiltTargetY = 0;
+      this.tiltBaseBeta = null;
+      this.tiltBaseGamma = null;
+      this.rmbTilting = false;
+    } else if (!this.reduce && !this.dead) {
+      this.beginTiltParallax();
     }
   }
 
@@ -1368,10 +1413,13 @@ export class JupiterScene {
     const glowMat = this.makeMat(
       GLOW_FRAG,
       {},
-      { transparent: true, blending: THREE.AdditiveBlending, side: THREE.BackSide },
+      { transparent: true, blending: THREE.NormalBlending, side: THREE.FrontSide },
     );
+    glowMat.depthWrite = false;
+    glowMat.depthTest = false;
     const glowSegs = this.quality.segs.glow;
-    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.04, glowSegs[0], glowSegs[1])), glowMat);
+    // FrontSide shell over the disc so soft-gray NormalBlend softens the hard silhouette.
+    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.02, glowSegs[0], glowSegs[1])), glowMat);
     glow.renderOrder = 6;
     glow.scale.set(1, 0.935, 1);
     this.scene.add(glow);

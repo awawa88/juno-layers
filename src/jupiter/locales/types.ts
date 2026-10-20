@@ -24,6 +24,8 @@ export type UiText = {
   restore: string;
   autoTour: string;
   pauseTour: string;
+  tilt: string;
+  tiltOff: string;
   depth: string;
   hideNotes: string;
   aboutLayer: string;
