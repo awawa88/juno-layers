@@ -243,8 +243,9 @@ void main() {
     float mu = clamp(dot(geomN, view), 0.0, 1.0);
     float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
 
-    // Near-opposition Minnaert falloff — softness lives on the cloud disc itself (OPAL ref).
-    float limbDark = pow(mu, 0.38) * mix(0.08, 1.0, smoothstep(0.0, 0.22, mu));
+    // Soft cloud limb like OPAL photo: wide Minnaert falloff so the disc edge fades into black
+    // on the cloud layer itself (no thick gray outer shell).
+    float limbDark = pow(mu, 0.50) * mix(0.02, 1.0, smoothstep(0.0, 0.45, mu));
     float terminator = pow(mu0, 0.75);
 
     // Slight atmospheric Rayleigh/haze tint shift toward dusty warm-slate at low view angles
@@ -265,9 +266,8 @@ void main() {
       }
     }
 
-    // Soft cloud-layer silhouette: fade opacity at the grazing limb so the edge blurs into
-    // space like andrew-style-ref (no hard mesh cutoff). Outer GLOW stays a quiet whisper.
-    float edgeSoft = smoothstep(0.0, 0.20, mu);
+    // Slight opacity taper at grazing angles (glow is near-off, so no gray halo stacking).
+    float edgeSoft = smoothstep(0.0, 0.12, mu);
     finish(col, uOpacity * edgeSoft);
   } else {
     // Interior cutaway wall when the cloud deck is peeled open:
@@ -689,12 +689,12 @@ void main() {
   vec3 sun = normalize(uSun);
   // Back-side shell: visible fragments are the far hemisphere, whose outward normal faces away from the viewer
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  // Ultra-quiet stratospheric whisper only — softness is on the cloud limb, not a gray shell.
-  float fres = pow(1.0 - ndv, 4.5) * smoothstep(0.0, 0.28, ndv);
-  float sunlit = mix(0.45, 1.0, smoothstep(-0.4, 0.25, dot(n, sun)));
+  // Barely-there sunlit whisper (opacity low) — avoid any visible gray ring around the globe.
+  float fres = pow(1.0 - ndv, 5.5) * smoothstep(0.0, 0.22, ndv);
+  float sunlit = smoothstep(-0.2, 0.35, dot(n, sun));
   float rim = fres * sunlit * uOpacity;
-  vec3 col = vec3(0.88, 0.80, 0.68);
-  gl_FragColor = vec4(col, rim * 0.12);
+  vec3 col = vec3(0.90, 0.82, 0.70);
+  gl_FragColor = vec4(col, rim * 0.06);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
