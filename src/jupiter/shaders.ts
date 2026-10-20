@@ -300,7 +300,15 @@ void main() {
   float duy = dFdy(u);
   dux -= floor(dux + 0.5);
   duy -= floor(duy + 0.5);
-  vec3 tex = textureGrad(uMap, vec2(u, v), vec2(dux, dFdx(v)), vec2(duy, dFdy(v))).rgb;
+  // Shrink explicit derivatives so domain warp does not force overly soft mips
+  // (modest sharpen vs Cassini/Hubble stills; keeps mip AA).
+  const float mipSharp = 0.72;
+  vec3 tex = textureGrad(
+    uMap,
+    vec2(u, v),
+    vec2(dux, dFdx(v)) * mipSharp,
+    vec2(duy, dFdy(v)) * mipSharp
+  ).rgb;
 
   // Delicately modulate with high-frequency feathery filaments (no harsh contrast)
   vec3 albedo = tex * (1.0 + fineShear * 0.08 + warpB * 0.05);
