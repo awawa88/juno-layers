@@ -453,6 +453,7 @@ export class JupiterScene {
         const sens = 0.0008;
         this.tiltTargetY = THREE.MathUtils.clamp(this.tiltTargetY + dx * sens, -0.09, 0.09);
         this.tiltTargetX = THREE.MathUtils.clamp(this.tiltTargetX + dy * sens, -0.09, 0.09);
+        this.lastActiveMs = performance.now();
         return;
       }
       if (window.matchMedia("(pointer: coarse)").matches) return;
@@ -533,6 +534,8 @@ export class JupiterScene {
   /** Nothing is moving on screen apart from slow ambient drift. */
   private isIdle(): boolean {
     if (performance.now() - this.lastActiveMs < 3000) return false;
+    // Never throttle while 3D tilt is tracking (gyro / RMB) — idleFps 30 felt like input lag.
+    if (this.tiltActive || this.rmbTilting) return false;
     if (this.touring || this.introT < 1 || this.camZoomT < 1) return false;
     for (const shell of this.shells) {
       const target = shell.canPeel ? THREE.MathUtils.clamp(this.focus - shell.index, 0, 1) : 0;
@@ -1985,8 +1988,15 @@ export class JupiterScene {
             this.tiltActive = false;
           }
         }
-        this.swayX += (this.tiltTargetX - this.swayX) * ease;
-        this.swayY += (this.tiltTargetY - this.swayY) * ease;
+        // Snap sway to target while dragging / gyro so star parallax keeps up; soft only on release.
+        const tracking = this.rmbTilting || this.tiltBaseBeta != null;
+        if (tracking) {
+          this.swayX = this.tiltTargetX;
+          this.swayY = this.tiltTargetY;
+        } else {
+          this.swayX += (this.tiltTargetX - this.swayX) * ease;
+          this.swayY += (this.tiltTargetY - this.swayY) * ease;
+        }
       } else if (tNow - this.lastInteractTime > 2.5) {
         this.swayY += (Math.sin(tNow * 0.22) * 0.035 - this.swayY) * ease;
         this.swayX += (Math.cos(tNow * 0.17) * 0.014 - this.swayX) * ease;
@@ -2041,10 +2051,18 @@ export class JupiterScene {
     // Viewpoint micro-orbit (spatial-photo feel): swing the camera a few degrees around the
     // controls target from the existing tilt values, still looking at Jupiter's centre.
     {
-      const k = 1 - Math.exp(-6 * dt);
       const on = !this.reduce && (this.tiltActive || this.rmbTilting);
-      this.camOrbitX += ((on ? this.tiltTargetX : 0) - this.camOrbitX) * k;
-      this.camOrbitY += ((on ? this.tiltTargetY : 0) - this.camOrbitY) * k;
+      // Active drag / gyro: snap orbit to tiltTarget (1:1 follow). Soft lerp only when
+      // springing home after RMB release or easing orbit off when tilt ends.
+      const tracking = this.rmbTilting || (this.tiltActive && this.tiltBaseBeta != null);
+      if (tracking) {
+        this.camOrbitX = this.tiltTargetX;
+        this.camOrbitY = this.tiltTargetY;
+      } else {
+        const k = 1 - Math.exp(-8 * dt);
+        this.camOrbitX += ((on ? this.tiltTargetX : 0) - this.camOrbitX) * k;
+        this.camOrbitY += ((on ? this.tiltTargetY : 0) - this.camOrbitY) * k;
+      }
       if (Math.abs(this.camOrbitX) > 1e-5 || Math.abs(this.camOrbitY) > 1e-5) {
         const gain = 1.4; // full clamp (0.09 rad) ≈ 7.2° — stronger spatial pop, still not a flight sim
         this.camOrbitBase.copy(this.camera.position);
