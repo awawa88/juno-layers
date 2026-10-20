@@ -423,10 +423,10 @@ export class JupiterScene {
         const dy = e.clientY - this.rmbLastY;
         this.rmbLastX = e.clientX;
         this.rmbLastY = e.clientY;
-        // Very small nudge — about the same ±3° envelope as gyro tilt.
-        const sens = 0.00055;
-        this.tiltTargetY = THREE.MathUtils.clamp(this.tiltTargetY + dx * sens, -0.05, 0.05);
-        this.tiltTargetX = THREE.MathUtils.clamp(this.tiltTargetX + dy * sens, -0.05, 0.05);
+        // Very small nudge — same envelope as device tilt.
+        const sens = 0.0008;
+        this.tiltTargetY = THREE.MathUtils.clamp(this.tiltTargetY + dx * sens, -0.09, 0.09);
+        this.tiltTargetX = THREE.MathUtils.clamp(this.tiltTargetX + dy * sens, -0.09, 0.09);
         return;
       }
       if (window.matchMedia("(pointer: coarse)").matches) return;
@@ -466,12 +466,12 @@ export class JupiterScene {
         this.tiltBaseBeta = beta;
         this.tiltBaseGamma = gamma;
       }
-      const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -22, 22);
-      const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -22, 22);
-      // ~±3° max sway — wallpaper parallax, not a flight sim
-      const sens = 0.0022;
-      this.tiltTargetX = THREE.MathUtils.clamp(-dBeta * sens, -0.05, 0.05);
-      this.tiltTargetY = THREE.MathUtils.clamp(dGamma * sens, -0.055, 0.055);
+      const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -28, 28);
+      const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -28, 28);
+      // ~±5° max sway — readable iPhone-camera parallax, not a flight sim
+      const sens = 0.0036;
+      this.tiltTargetX = THREE.MathUtils.clamp(-dBeta * sens, -0.09, 0.09);
+      this.tiltTargetY = THREE.MathUtils.clamp(dGamma * sens, -0.09, 0.09);
       this.tiltActive = true;
     };
     this.onTiltGesture = () => {
@@ -489,9 +489,10 @@ export class JupiterScene {
     for (const type of ["pointerdown", "pointermove", "wheel", "touchstart"] as const) {
       canvas.addEventListener(type, this.onActivity, { passive: true });
     }
-    // First user gesture may unlock iOS DeviceOrientation permission; Android usually needs none.
+    // First user gesture unlocks iOS DeviceOrientation permission (must be gesture-tied).
     canvas.addEventListener("pointerdown", this.onTiltGesture, { passive: true });
     canvas.addEventListener("touchstart", this.onTiltGesture, { passive: true });
+    canvas.addEventListener("click", this.onTiltGesture, { passive: true });
     this.controls.addEventListener("change", this.onActivity);
     document.addEventListener("visibilitychange", this.onVisibility);
     if (typeof IntersectionObserver !== "undefined") {
@@ -851,29 +852,40 @@ export class JupiterScene {
   /**
    * Enable subtle device-tilt parallax (iPhone camera / wallpaper style) on
    * iPhone, iPad, and Android tablets. No-ops on desktop without sensors.
-   * iOS Safari may prompt once via DeviceOrientationEvent.requestPermission.
+   * iOS Safari requires DeviceOrientationEvent.requestPermission() after a gesture.
    */
   private async enableTiltParallax(): Promise<void> {
     if (this.tiltTried || this.reduce || this.dead) return;
-    this.tiltTried = true;
-    // Desktop / no sensor API — leave idle sway alone.
     if (typeof window === "undefined" || typeof DeviceOrientationEvent === "undefined") return;
-    // Fine pointer without touch ≈ desktop mouse; skip gyro there.
+
+    // Desktop mouse-only → skip sensors (RMB micro-tilt still works).
+    // iPad + Magic Keyboard often reports pointer:fine / hover — still enable when touch exists.
+    const hasTouch =
+      (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0) || "ontouchstart" in window;
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     const hoverNone = window.matchMedia("(hover: none)").matches;
-    if (!coarse && !hoverNone) return;
+    if (!hasTouch && !coarse && !hoverNone) return;
+
+    // Mark tried only once we actually attempt permission / listeners (so a dismissed
+    // prompt can be retried on a later tap).
+    this.tiltTried = true;
 
     type DOE = typeof DeviceOrientationEvent & {
       requestPermission?: () => Promise<"granted" | "denied" | "default">;
     };
     const DOE = DeviceOrientationEvent as DOE;
     try {
+      // Must run in the user-gesture turn on iOS Safari (13+).
       if (typeof DOE.requestPermission === "function") {
         const state = await DOE.requestPermission();
-        if (state !== "granted") return;
+        if (state !== "granted") {
+          this.tiltTried = false; // allow another tap to re-prompt
+          return;
+        }
       }
       window.addEventListener("deviceorientation", this.onDeviceOrientation, true);
     } catch {
+      this.tiltTried = false;
       // Permission denied or unsupported — keep drag orbit; no crash.
     }
   }
@@ -902,6 +914,7 @@ export class JupiterScene {
     }
     this.canvas.removeEventListener("pointerdown", this.onTiltGesture);
     this.canvas.removeEventListener("touchstart", this.onTiltGesture);
+    this.canvas.removeEventListener("click", this.onTiltGesture);
     window.removeEventListener("deviceorientation", this.onDeviceOrientation);
     this.controls.removeEventListener("change", this.onActivity);
     document.removeEventListener("visibilitychange", this.onVisibility);
