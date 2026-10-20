@@ -247,14 +247,15 @@ void main() {
     // Use vNrm (inverse-transpose) for mu — raw modelMatrix*vObj breaks on oblate scale.
     float muGeo = clamp(dot(normalize(vNrm), view), 0.0, 1.0);
     float w = max(fwidth(muGeo), 1e-4);
+    // Keep wide soft hazeEdge (Andrew: "Nice transition") — only deepen 3D shadow a little.
     float hazeEdge = pow(smoothstep(0.0, 0.72 + w * 16.0, muGeo), 1.15);
-    float limbDark = mix(0.95, 1.0, hazeEdge);
+    float limbDark = mix(0.88, 1.0, pow(hazeEdge, 0.90));
     float terminator = pow(mu0, 0.75);
     vec3 lit = albedo * (0.025 + 1.06 * terminator) * limbDark;
-    // Muted warm gray-brown like andrew-edge-ref-v2 — nudged a bit darker (still not a black collar).
-    vec3 haze = vec3(0.26, 0.24, 0.22);
+    // Soft taupe a bit darker for gentle spherical shadow — not a black collar.
+    vec3 haze = vec3(0.21, 0.19, 0.18);
     vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
-    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.70);
+    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.72);
     vec3 col = mix(haze, mid, hazeEdge);
 
     // Occasional Juno-observed lightning flashes deep inside cyclonic belts (NEB ~ +12°, SEB ~ -14°)
