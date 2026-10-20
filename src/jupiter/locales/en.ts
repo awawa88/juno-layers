@@ -24,7 +24,7 @@ export const en: Locale = {
     restore: "Restore",
     autoTour: "Auto tour",
     pauseTour: "Pause",
-    tilt: "Tilt",
+    tilt: "3D tilt",
     tiltOff: "Disable tilt",
     depth: "Peel depth",
     hideNotes: "Hide notes",

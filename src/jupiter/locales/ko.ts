@@ -12,7 +12,7 @@ export const ko: Locale = {
     restore: "원래대로",
     autoTour: "자동 안내",
     pauseTour: "일시 정지",
-    tilt: "기울기",
+    tilt: "3D 기울기",
     tiltOff: "기울기 끄기",
     depth: "단면 깊이",
     hideNotes: "설명 닫기",
