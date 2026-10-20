@@ -280,6 +280,20 @@ export class JupiterScene {
   private homeDist = 0;
   private swayX = 0;
   private swayY = 0;
+  /** Device-tilt parallax targets (iPhone-camera / wallpaper style), radians. */
+  private tiltTargetX = 0;
+  private tiltTargetY = 0;
+  private tiltActive = false;
+  private tiltTried = false;
+  private tiltBaseBeta: number | null = null;
+  private tiltBaseGamma: number | null = null;
+  private readonly onDeviceOrientation: (e: DeviceOrientationEvent) => void;
+  private readonly onTiltGesture: () => void;
+  /** Desktop: right-mouse drag for the same tiny parallax as device tilt. */
+  private rmbTilting = false;
+  private rmbLastX = 0;
+  private rmbLastY = 0;
+  private readonly onContextMenu: (e: Event) => void;
   private viewMoved = false;
   private readonly viewOff = new THREE.Vector2();
   private readonly viewOffTarget = new THREE.Vector2();
@@ -355,6 +369,10 @@ export class JupiterScene {
     this.controls.zoomSpeed = mobile ? 0.85 : 0.7;
     this.controls.touches.ONE = THREE.TOUCH.ROTATE;
     this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+    // RMB is reserved for tiny tilt parallax (not orbit/pan).
+    this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+    this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+    this.controls.mouseButtons.RIGHT = -1 as unknown as THREE.MOUSE;
 
     this.timer.connect(document);
     this.build();
@@ -385,18 +403,49 @@ export class JupiterScene {
         this.touring = false;
         this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), false);
       }
+      // Desktop RMB: tiny camera-style tilt (same amplitude as device parallax).
+      if (e.button === 2 && !this.reduce) {
+        this.rmbTilting = true;
+        this.rmbLastX = e.clientX;
+        this.rmbLastY = e.clientY;
+        this.tiltActive = true;
+        try {
+          this.canvas.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
     };
     this.onPointerMove = (e) => {
       if (e.buttons > 0) this.lastInteractTime = this.timeU.value;
+      if (this.rmbTilting && (e.buttons & 2)) {
+        const dx = e.clientX - this.rmbLastX;
+        const dy = e.clientY - this.rmbLastY;
+        this.rmbLastX = e.clientX;
+        this.rmbLastY = e.clientY;
+        // Very small nudge — about the same ±3° envelope as gyro tilt.
+        const sens = 0.00055;
+        this.tiltTargetY = THREE.MathUtils.clamp(this.tiltTargetY + dx * sens, -0.05, 0.05);
+        this.tiltTargetX = THREE.MathUtils.clamp(this.tiltTargetX + dy * sens, -0.05, 0.05);
+        return;
+      }
       if (window.matchMedia("(pointer: coarse)").matches) return;
       const hit = this.hitTest(e.clientX, e.clientY);
       this.hooks.onHover?.(hit, e.clientX, e.clientY);
     };
     this.onPointerUp = (e) => {
+      if (e.button === 2 || this.rmbTilting) {
+        this.rmbTilting = false;
+        try {
+          this.canvas.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
       const dist = Math.hypot(e.clientX - this.downX, e.clientY - this.downY);
       const coarse = window.matchMedia("(pointer: coarse)").matches;
       const slop = coarse ? 14 : 8;
-      if (dist < slop && performance.now() - this.downT < 450) {
+      if (e.button === 0 && dist < slop && performance.now() - this.downT < 450) {
         const hit = this.hitTest(e.clientX, e.clientY);
         if (hit) this.hooks.onPick?.(hit);
       }
@@ -404,10 +453,35 @@ export class JupiterScene {
     this.onPointerLeave = () => {
       this.hooks.onHover?.(null, 0, 0);
     };
+    this.onContextMenu = (e) => {
+      e.preventDefault();
+    };
+    // iPhone-camera-style parallax: subtle planet sway from device tilt (iPad/iPhone/Android).
+    this.onDeviceOrientation = (e: DeviceOrientationEvent) => {
+      if (this.reduce || this.dead) return;
+      const beta = e.beta;
+      const gamma = e.gamma;
+      if (beta == null || gamma == null) return;
+      if (this.tiltBaseBeta == null) {
+        this.tiltBaseBeta = beta;
+        this.tiltBaseGamma = gamma;
+      }
+      const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -22, 22);
+      const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -22, 22);
+      // ~±3° max sway — wallpaper parallax, not a flight sim
+      const sens = 0.0022;
+      this.tiltTargetX = THREE.MathUtils.clamp(-dBeta * sens, -0.05, 0.05);
+      this.tiltTargetY = THREE.MathUtils.clamp(dGamma * sens, -0.055, 0.055);
+      this.tiltActive = true;
+    };
+    this.onTiltGesture = () => {
+      void this.enableTiltParallax();
+    };
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointermove", this.onPointerMove);
     canvas.addEventListener("pointerup", this.onPointerUp);
     canvas.addEventListener("pointerleave", this.onPointerLeave);
+    canvas.addEventListener("contextmenu", this.onContextMenu);
 
     this.resizeObs = new ResizeObserver(() => this.resize());
     this.resizeObs.observe(canvas);
@@ -415,6 +489,9 @@ export class JupiterScene {
     for (const type of ["pointerdown", "pointermove", "wheel", "touchstart"] as const) {
       canvas.addEventListener(type, this.onActivity, { passive: true });
     }
+    // First user gesture may unlock iOS DeviceOrientation permission; Android usually needs none.
+    canvas.addEventListener("pointerdown", this.onTiltGesture, { passive: true });
+    canvas.addEventListener("touchstart", this.onTiltGesture, { passive: true });
     this.controls.addEventListener("change", this.onActivity);
     document.addEventListener("visibilitychange", this.onVisibility);
     if (typeof IntersectionObserver !== "undefined") {
@@ -771,11 +848,45 @@ export class JupiterScene {
     this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), active);
   }
 
+  /**
+   * Enable subtle device-tilt parallax (iPhone camera / wallpaper style) on
+   * iPhone, iPad, and Android tablets. No-ops on desktop without sensors.
+   * iOS Safari may prompt once via DeviceOrientationEvent.requestPermission.
+   */
+  private async enableTiltParallax(): Promise<void> {
+    if (this.tiltTried || this.reduce || this.dead) return;
+    this.tiltTried = true;
+    // Desktop / no sensor API — leave idle sway alone.
+    if (typeof window === "undefined" || typeof DeviceOrientationEvent === "undefined") return;
+    // Fine pointer without touch ≈ desktop mouse; skip gyro there.
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const hoverNone = window.matchMedia("(hover: none)").matches;
+    if (!coarse && !hoverNone) return;
+
+    type DOE = typeof DeviceOrientationEvent & {
+      requestPermission?: () => Promise<"granted" | "denied" | "default">;
+    };
+    const DOE = DeviceOrientationEvent as DOE;
+    try {
+      if (typeof DOE.requestPermission === "function") {
+        const state = await DOE.requestPermission();
+        if (state !== "granted") return;
+      }
+      window.addEventListener("deviceorientation", this.onDeviceOrientation, true);
+    } catch {
+      // Permission denied or unsupported — keep drag orbit; no crash.
+    }
+  }
+
   setReduceMotion(reduce: boolean): void {
     this.reduce = reduce;
     if (reduce) {
       this.introT = 1;
       this.camZoomT = 1;
+      this.tiltActive = false;
+      this.tiltTargetX = 0;
+      this.tiltTargetY = 0;
+      window.removeEventListener("deviceorientation", this.onDeviceOrientation);
     }
   }
 
@@ -789,6 +900,9 @@ export class JupiterScene {
     for (const type of ["pointerdown", "pointermove", "wheel", "touchstart"] as const) {
       this.canvas.removeEventListener(type, this.onActivity);
     }
+    this.canvas.removeEventListener("pointerdown", this.onTiltGesture);
+    this.canvas.removeEventListener("touchstart", this.onTiltGesture);
+    window.removeEventListener("deviceorientation", this.onDeviceOrientation);
     this.controls.removeEventListener("change", this.onActivity);
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.visObs?.disconnect();
@@ -799,6 +913,7 @@ export class JupiterScene {
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.canvas.removeEventListener("pointerup", this.onPointerUp);
     this.canvas.removeEventListener("pointerleave", this.onPointerLeave);
+    this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     for (const item of this.disposables) item.dispose();
     this.renderer.dispose();
   }
@@ -1131,7 +1246,7 @@ export class JupiterScene {
       { transparent: true, blending: THREE.AdditiveBlending, side: THREE.BackSide },
     );
     const glowSegs = this.quality.segs.glow;
-    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.12, glowSegs[0], glowSegs[1])), glowMat);
+    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.18, glowSegs[0], glowSegs[1])), glowMat);
     glow.renderOrder = 6;
     glow.scale.set(1, 0.935, 1);
     this.scene.add(glow);
@@ -1501,11 +1616,28 @@ export class JupiterScene {
       this.camera.position.lerpVectors(this.camZoomFrom, this.camZoomTo, e);
     }
 
-    // Subtle idle orbital breathing sway so the 3D scene feels alive even before dragging
-    if (!this.reduce && this.introT >= 1 && tNow - this.lastInteractTime > 2.5) {
-      const ease = 1 - Math.exp(-1.5 * dt);
-      this.swayY += (Math.sin(tNow * 0.22) * 0.035 - this.swayY) * ease;
-      this.swayX += (Math.cos(tNow * 0.17) * 0.014 - this.swayX) * ease;
+    // Idle breathing sway, device-tilt parallax, or desktop RMB micro-tilt (same tiny envelope).
+    if (!this.reduce && this.introT >= 1) {
+      const tilting = this.tiltActive || this.rmbTilting;
+      const ease = 1 - Math.exp(-(tilting ? 5.5 : 1.5) * dt);
+      if (tilting) {
+        // After RMB release, gently spring targets home so the globe settles (gyro keeps absolute).
+        if (!this.rmbTilting && this.tiltBaseBeta == null) {
+          const home = 1 - Math.exp(-2.2 * dt);
+          this.tiltTargetX += (0 - this.tiltTargetX) * home;
+          this.tiltTargetY += (0 - this.tiltTargetY) * home;
+          if (Math.abs(this.tiltTargetX) < 0.0004 && Math.abs(this.tiltTargetY) < 0.0004) {
+            this.tiltTargetX = 0;
+            this.tiltTargetY = 0;
+            this.tiltActive = false;
+          }
+        }
+        this.swayX += (this.tiltTargetX - this.swayX) * ease;
+        this.swayY += (this.tiltTargetY - this.swayY) * ease;
+      } else if (tNow - this.lastInteractTime > 2.5) {
+        this.swayY += (Math.sin(tNow * 0.22) * 0.035 - this.swayY) * ease;
+        this.swayX += (Math.cos(tNow * 0.17) * 0.014 - this.swayX) * ease;
+      }
     }
     this.planetGroup.rotation.y = this.swayY;
     this.planetGroup.rotation.x = this.swayX;

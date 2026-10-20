@@ -243,9 +243,10 @@ void main() {
     float mu = clamp(dot(geomN, view), 0.0, 1.0);
     float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
 
-    // Near-opposition (Earth/Hubble) illumination with a touch more Minnaert falloff so the
-    // disk reads as a sphere (center bright, soft darkening toward the limb — OPAL photo depth).
-    float limbDark = pow(mu, 0.46) * smoothstep(0.0, 0.09, mu);
+    // Near-opposition Minnaert falloff for spherical depth (center bright → soft limb).
+    // Soft limb: retain a little ambient at the rim so the mesh edge doesn't punch a black gap;
+    // BackSide glow supplies the blurry OPAL photographic falloff outside the disc.
+    float limbDark = pow(mu, 0.40) * mix(0.16, 1.0, smoothstep(0.0, 0.18, mu));
     float terminator = pow(mu0, 0.75);
 
     // Slight atmospheric Rayleigh/haze tint shift toward dusty warm-slate at low view angles
@@ -687,13 +688,12 @@ void main() {
   vec3 sun = normalize(uSun);
   // Back-side shell: visible fragments are the far hemisphere, whose outward normal faces away from the viewer
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  // Soft atmospheric limb haze for spherical depth (matches OPAL photo soft silhouette).
-  // Wider/softer fresnel than the old tight whisper; present all around, stronger on sunlit side.
-  float fres = pow(1.0 - ndv, 2.4) * smoothstep(0.0, 0.48, ndv);
-  float sunlit = mix(0.70, 1.0, smoothstep(-0.45, 0.25, dot(n, sun)));
+  // Soft atmospheric limb haze — diffuse warm whisper (avoid a grey hard shell).
+  float fres = pow(1.0 - ndv, 1.8) * smoothstep(0.02, 0.55, ndv);
+  float sunlit = mix(0.75, 1.0, smoothstep(-0.45, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  vec3 col = vec3(0.93, 0.85, 0.73);
-  gl_FragColor = vec4(col, rim * 0.48);
+  vec3 col = vec3(1.0, 0.92, 0.80);
+  gl_FragColor = vec4(col, rim * 0.42);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
