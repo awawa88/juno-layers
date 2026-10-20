@@ -20,3 +20,5 @@ The planet is a stylized Three.js model, not a photograph and not a numerical in
 Earth’s mini-globe albedo is NASA Blue Marble (Visible Earth 57752), with a baked land/ocean alpha mask. Credit: NASA Earth Observatory / NASA Goddard Space Flight Center (public domain).
 
 The Moon beside it uses a lightweight NASA LROC WAC color map (CGI Moon Kit / SVS 4720). Credit: NASA / GSFC / SVS / ASU LROC (public domain).
+
+Jupiter’s cloud deck uses a Hubble OPAL global map (Jan 2015 Rotation 1), lightly resized. Credit: NASA, ESA, A. Simon (GSFC), M. Wong (UC Berkeley), G. Orton (JPL-Caltech).

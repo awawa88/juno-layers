@@ -55,8 +55,6 @@ type Shell = {
 
 const OUTER = 2.18;
 
-/** Planet spin matching the cloud shader's Great Red Spot drift, so the Spot holds still in world space. */
-const GRS_DRIFT = 0.0045;
 /** World azimuth of the Great Red Spot (longitude π/2 − 0.18 seen from +Z). */
 const GRS_AZ = 0.18;
 /** Classic portrait: camera a little west of the Spot so it sits in the lower-right of the disk. */
@@ -1432,12 +1430,9 @@ export class JupiterScene {
         this.tmp.normalize();
         const lat = Math.asin(THREE.MathUtils.clamp(this.tmp.y, -1, 1));
         const lon = Math.atan2(this.tmp.z, this.tmp.x);
-        // Account for the dynamic zonal flow offset of the storms in the cloud shader
-        const elapsed = this.timeU.value;
+        // Photo cloud map locks storms to mesh UVs (no shader lon drift).
         for (const spot of SPOTS) {
-          const spotSpeed = spot.kind === "grs" ? -0.0045 : spot.kind === "oval" ? 0.008 : -0.006;
-          const curLon = spot.lon + elapsed * spotSpeed;
-          const dlon = Math.atan2(Math.sin(lon - curLon), Math.cos(lon - curLon));
+          const dlon = Math.atan2(Math.sin(lon - spot.lon), Math.cos(lon - spot.lon));
           const e = Math.hypot(dlon / spot.rx, (lat - spot.lat) / spot.ry);
           if (e < 0.98) {
             feature = spot.name;
@@ -1512,7 +1507,7 @@ export class JupiterScene {
       this.swayY += (Math.sin(tNow * 0.22) * 0.035 - this.swayY) * ease;
       this.swayX += (Math.cos(tNow * 0.17) * 0.014 - this.swayX) * ease;
     }
-    this.planetGroup.rotation.y = this.swayY - tNow * GRS_DRIFT;
+    this.planetGroup.rotation.y = this.swayY;
     this.planetGroup.rotation.x = this.swayX;
 
     if (this.viewOff.distanceToSquared(this.viewOffTarget) > 0.04) {
