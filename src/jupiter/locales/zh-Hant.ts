@@ -12,7 +12,7 @@ export const zhHant: Locale = {
     restore: "復原",
     autoTour: "自動導覽",
     pauseTour: "暫停",
-    tilt: "傾斜",
+    tilt: "3D",
     tiltOff: "關閉傾斜",
     depth: "剖視深度",
     hideNotes: "收起說明",

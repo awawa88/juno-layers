@@ -12,7 +12,7 @@ export const ja: Locale = {
     restore: "元に戻す",
     autoTour: "自動案内",
     pauseTour: "一時停止",
-    tilt: "傾き",
+    tilt: "3D",
     tiltOff: "傾きをオフ",
     depth: "断面の深さ",
     hideNotes: "説明を閉じる",
