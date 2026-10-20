@@ -1226,6 +1226,27 @@ export class JupiterScene {
       this.lastTiltDeltaBeta = 0;
       this.lastTiltDeltaGamma = 0;
       this.rmbTilting = false;
+      // Snap viewpoint home immediately — do not leave last gyro/RMB micro-orbit or sway stuck.
+      if (this.camOrbitOn) {
+        this.camera.position.copy(this.camOrbitBase);
+        this.camOrbitOn = false;
+      }
+      this.camOrbitX = 0;
+      this.camOrbitY = 0;
+      this.swayX = 0;
+      this.swayY = 0;
+      this.planetSwayX = 0;
+      this.planetSwayY = 0;
+      this.planetGroup.rotation.x = 0;
+      this.planetGroup.rotation.y = 0;
+      for (const layer of this.starLayers) {
+        layer.group.rotation.x = 0;
+        layer.group.rotation.y = 0;
+      }
+      if (Math.abs(this.camera.fov - this.baseFov) > 0.01) {
+        this.camera.fov = this.baseFov;
+        this.camera.updateProjectionMatrix();
+      }
     } else if (!this.reduce && !this.dead) {
       this.beginTiltParallax();
     }
@@ -2099,7 +2120,7 @@ export class JupiterScene {
     // Viewpoint micro-orbit (spatial-photo feel): swing the camera a few degrees around the
     // controls target from the existing tilt values, still looking at Jupiter's centre.
     {
-      const on = !this.reduce && (this.tiltActive || this.rmbTilting);
+      const on = this.tiltEnabled && !this.reduce && (this.tiltActive || this.rmbTilting);
       // Active drag / gyro: snap orbit to tiltTarget (1:1 follow). Soft lerp only when
       // springing home after RMB release or easing orbit off when tilt ends.
       const tracking = this.rmbTilting || (this.tiltActive && this.tiltBaseBeta != null);
