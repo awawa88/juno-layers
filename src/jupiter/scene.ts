@@ -287,9 +287,6 @@ export class JupiterScene {
   private homeDist = 0;
   private swayX = 0;
   private swayY = 0;
-  /** Smoothed camera look-tilt (radians) driven by RMB / device tilt — the visible "camera shake". */
-  private camTiltX = 0;
-  private camTiltY = 0;
   /** Device-tilt parallax targets (iPhone-camera / wallpaper style), radians. */
   private tiltTargetX = 0;
   private tiltTargetY = 0;
@@ -1819,10 +1816,8 @@ export class JupiterScene {
             this.tiltActive = false;
           }
         }
-        // Tilt moves the camera (below), not the globe: spinning a sphere about its own
-        // center by a few degrees is nearly invisible. Let planet sway relax to rest.
-        this.swayX += (0 - this.swayX) * ease;
-        this.swayY += (0 - this.swayY) * ease;
+        this.swayX += (this.tiltTargetX - this.swayX) * ease;
+        this.swayY += (this.tiltTargetY - this.swayY) * ease;
       } else if (tNow - this.lastInteractTime > 2.5) {
         this.swayY += (Math.sin(tNow * 0.22) * 0.035 - this.swayY) * ease;
         this.swayX += (Math.cos(tNow * 0.17) * 0.014 - this.swayX) * ease;
@@ -1841,18 +1836,6 @@ export class JupiterScene {
 
     this.controls.update();
     this.sunU.value.copy(this.sunCam).applyQuaternion(this.camera.quaternion);
-    // Camera-style micro-tilt: OrbitControls.update() re-runs lookAt every frame, so this
-    // small local rotation never accumulates and springs home with tiltTarget → 0.
-    {
-      const k = 1 - Math.exp(-6 * dt);
-      const on = !this.reduce && (this.tiltActive || this.rmbTilting);
-      this.camTiltX += ((on ? this.tiltTargetX : 0) - this.camTiltX) * k;
-      this.camTiltY += ((on ? this.tiltTargetY : 0) - this.camTiltY) * k;
-      if (this.camTiltX !== 0 || this.camTiltY !== 0) {
-        this.camera.rotateY(-this.camTiltY * 0.4);
-        this.camera.rotateX(-this.camTiltX * 0.4);
-      }
-    }
 
     const lambda = this.reduce ? 28 : 4.6;
     for (const shell of this.shells) {
