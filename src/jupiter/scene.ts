@@ -287,6 +287,15 @@ export class JupiterScene {
   private homeDist = 0;
   private swayX = 0;
   private swayY = 0;
+  private planetSwayX = 0;
+  private planetSwayY = 0;
+  /** Viewpoint micro-orbit driven by tilt; base position restored at the start of each frame. */
+  private camOrbitX = 0;
+  private camOrbitY = 0;
+  private camOrbitOn = false;
+  private readonly camOrbitBase = new THREE.Vector3();
+  private readonly camOrbitOff = new THREE.Vector3();
+  private readonly camOrbitAxis = new THREE.Vector3();
   /** Star depth layers and their parallax gain on the planet tilt/sway. */
   private starLayers: { group: THREE.Group; k: number }[] = [];
   /** Device-tilt parallax targets (iPhone-camera / wallpaper style), radians. */
@@ -1506,10 +1515,10 @@ export class JupiterScene {
     // Three depth layers; frame() turns each by a different fraction of the existing tilt/sway
     // so the planet reads as floating in front (far barely moves, near moves most).
     this.starLayers = [
-      { group: sky, k: 0.12 },
-      { group: make(faint, 0.26, 95, 40, 0.7), k: 0.2 },
-      { group: make(faint, 0.2, 55, 30, 0.85), k: 0.45 },
-      { group: make(bright * 2, 0.3, 34, 14, 0.95), k: 1.0 },
+      { group: sky, k: 0.15 },
+      { group: make(faint, 0.26, 95, 40, 0.7), k: 0.3 },
+      { group: make(faint, 0.2, 55, 30, 0.85), k: 0.65 },
+      { group: make(bright * 2, 0.3, 34, 14, 0.95), k: 1.3 },
     ];
   }
 
@@ -1801,6 +1810,11 @@ export class JupiterScene {
     this.lastRenderMs = time;
     this.adaptResolution(time);
     this.timer.update(time);
+    // Undo last frame's viewpoint micro-orbit so OrbitControls/tour/intro never see it (no accumulation).
+    if (this.camOrbitOn) {
+      this.camera.position.copy(this.camOrbitBase);
+      this.camOrbitOn = false;
+    }
     const dt = Math.min(this.timer.getDelta(), 0.05);
     if (!this.reduce) this.timeU.value += dt;
     const tNow = this.timeU.value;
@@ -1861,12 +1875,17 @@ export class JupiterScene {
         this.swayX += (Math.cos(tNow * 0.17) * 0.014 - this.swayX) * ease;
       }
     }
-    this.planetGroup.rotation.y = this.swayY;
-    this.planetGroup.rotation.x = this.swayX;
-    for (const layer of this.starLayers) {
-      layer.group.rotation.y = -this.swayY * layer.k;
-      layer.group.rotation.x = -this.swayX * layer.k;
+    // Tilt no longer turns Jupiter; it moves the viewpoint (micro-orbit below). Planet keeps only
+    // its idle sway, held at rest while a tilt is active or springing back.
+    {
+      const holdStill = this.tiltActive || this.rmbTilting;
+      const pe = 1 - Math.exp(-5.5 * dt);
+      this.planetSwayX += ((holdStill ? 0 : this.swayX) - this.planetSwayX) * pe;
+      this.planetSwayY += ((holdStill ? 0 : this.swayY) - this.planetSwayY) * pe;
     }
+    this.planetGroup.rotation.y = this.planetSwayY;
+    this.planetGroup.rotation.x = this.planetSwayX;
+    // Star layers stay fixed in world space: the camera orbit itself produces true depth parallax.
 
     if (this.viewOff.distanceToSquared(this.viewOffTarget) > 0.04) {
       this.viewOff.lerp(this.viewOffTarget, 1 - Math.exp(-7 * dt));
@@ -1878,6 +1897,26 @@ export class JupiterScene {
 
     this.controls.update();
     this.sunU.value.copy(this.sunCam).applyQuaternion(this.camera.quaternion);
+    // Viewpoint micro-orbit (spatial-photo feel): swing the camera a few degrees around the
+    // controls target from the existing tilt values, still looking at Jupiter's centre.
+    {
+      const k = 1 - Math.exp(-6 * dt);
+      const on = !this.reduce && (this.tiltActive || this.rmbTilting);
+      this.camOrbitX += ((on ? this.tiltTargetX : 0) - this.camOrbitX) * k;
+      this.camOrbitY += ((on ? this.tiltTargetY : 0) - this.camOrbitY) * k;
+      if (Math.abs(this.camOrbitX) > 1e-5 || Math.abs(this.camOrbitY) > 1e-5) {
+        const gain = 0.55; // full clamp (0.09 rad) ≈ 2.8° of orbit
+        this.camOrbitBase.copy(this.camera.position);
+        const off = this.camOrbitOff.copy(this.camera.position).sub(this.controls.target);
+        const right = this.camOrbitAxis.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        off.applyAxisAngle(right, -this.camOrbitX * gain);
+        off.applyAxisAngle(this.camera.up, -this.camOrbitY * gain);
+        this.camera.position.copy(this.controls.target).add(off);
+        this.camera.lookAt(this.controls.target);
+        this.camera.updateMatrixWorld(); // so Earth label / picking project with the orbited view
+        this.camOrbitOn = true;
+      }
+    }
 
     const lambda = this.reduce ? 28 : 4.6;
     for (const shell of this.shells) {
