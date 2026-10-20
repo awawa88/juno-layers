@@ -205,8 +205,10 @@ void main() {
     vec2(duy, dFdy(v)) * mipSharp
   ).rgb;
 
+  // Mild exposure lift toward NASA OPAL photographic ref (center reads brighter; limb still falls off).
+  const float cloudBrightness = 1.35;
   // Very light filament modulation — preserve photo edge frequency
-  vec3 albedo = tex * (1.0 + fineShear * 0.03);
+  vec3 albedo = tex * cloudBrightness * (1.0 + fineShear * 0.03);
 
   float stormH = 0.0;
   vec2 stormQ = vec2(0.0);
@@ -241,9 +243,9 @@ void main() {
     float mu = clamp(dot(geomN, view), 0.0, 1.0);
     float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
 
-    // Near-opposition (Earth/Hubble) illumination: mu0 ~ mu, so the combined Minnaert falloff is
-    // mu0^0.75 * mu^0.38 -- soft limb darkening that dims the edge without a wide black band
-    float limbDark = pow(mu, 0.38) * smoothstep(0.0, 0.07, mu);
+    // Near-opposition (Earth/Hubble) illumination with a touch more Minnaert falloff so the
+    // disk reads as a sphere (center bright, soft darkening toward the limb — OPAL photo depth).
+    float limbDark = pow(mu, 0.46) * smoothstep(0.0, 0.09, mu);
     float terminator = pow(mu0, 0.75);
 
     // Slight atmospheric Rayleigh/haze tint shift toward dusty warm-slate at low view angles
@@ -685,13 +687,13 @@ void main() {
   vec3 sun = normalize(uSun);
   // Back-side shell: visible fragments are the far hemisphere, whose outward normal faces away from the viewer
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  // Ultra-subtle, tight stratospheric haze whisper on the sunlit limb only
-  // (keeps the crisp, dark-edge Hubble/Cassini photographic look without neon halo)
-  float fres = pow(1.0 - ndv, 6.5) * smoothstep(0.0, 0.25, ndv);
-  float sunlit = smoothstep(-0.5, 0.2, dot(n, sun));
+  // Soft atmospheric limb haze for spherical depth (matches OPAL photo soft silhouette).
+  // Wider/softer fresnel than the old tight whisper; present all around, stronger on sunlit side.
+  float fres = pow(1.0 - ndv, 2.4) * smoothstep(0.0, 0.48, ndv);
+  float sunlit = mix(0.70, 1.0, smoothstep(-0.45, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  vec3 col = vec3(0.84, 0.76, 0.64);
-  gl_FragColor = vec4(col, rim * 0.18);
+  vec3 col = vec3(0.93, 0.85, 0.73);
+  gl_FragColor = vec4(col, rim * 0.48);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

@@ -1131,7 +1131,7 @@ export class JupiterScene {
       { transparent: true, blending: THREE.AdditiveBlending, side: THREE.BackSide },
     );
     const glowSegs = this.quality.segs.glow;
-    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.055, glowSegs[0], glowSegs[1])), glowMat);
+    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.12, glowSegs[0], glowSegs[1])), glowMat);
     glow.renderOrder = 6;
     glow.scale.set(1, 0.935, 1);
     this.scene.add(glow);
