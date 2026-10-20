@@ -6,7 +6,7 @@ import { faqItems, isLatin, uiText, useLang } from "@/jupiter/i18n";
 export const Route = createFileRoute("/faq")({
   head: () => ({
     meta: [
-      { title: "FAQ · Juno Layers" },
+      { title: "FAQ · Jupiter Layers" },
       {
         name: "description",
         content:

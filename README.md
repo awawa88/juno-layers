@@ -1,4 +1,4 @@
-# Juno Layers
+# Jupiter Layers
 
 A browser view of Jupiter you can peel. The outer shell is the cloud deck, with the belts and the Great Red Spot. Under it: molecular hydrogen, liquid metallic hydrogen, the dilute core from the Juno mission, and a small denser center drawn as a hypothesis.
 

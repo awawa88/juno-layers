@@ -16,7 +16,7 @@ export const en: Locale = {
   ui: {
     language: "Language",
     kicker: "From the Juno mission",
-    title: "Juno Layers",
+    title: "Jupiter Layers",
     lede: "Peel a stylized Jupiter. The dilute core was the surprise.",
     earth: "Earth, to scale",
     peelDeeper: "Peel deeper",

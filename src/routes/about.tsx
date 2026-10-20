@@ -7,7 +7,7 @@ import { distanceText, factItems, isLatin, uiText, useLang } from "@/jupiter/i18
 export const Route = createFileRoute("/about")({
   head: () => ({
     meta: [
-      { title: "About Jupiter · Juno Layers" },
+      { title: "About Jupiter · Jupiter Layers" },
       {
         name: "description",
         content:

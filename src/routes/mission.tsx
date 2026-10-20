@@ -8,7 +8,7 @@ import { OBJECTIVES } from "@/jupiter/mission";
 export const Route = createFileRoute("/mission")({
   head: () => ({
     meta: [
-      { title: "Juno Mission · Juno Layers" },
+      { title: "Juno Mission · Jupiter Layers" },
       {
         name: "description",
         content:
