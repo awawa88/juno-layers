@@ -254,20 +254,20 @@ void main() {
     // Use vNrm (inverse-transpose) for mu — raw modelMatrix*vObj breaks on oblate scale.
     float muGeo = clamp(dot(normalize(vNrm), view), 0.0, 1.0);
     float w = max(fwidth(muGeo), 1e-4);
-    // Soft ball shadow (Andrew): Minnaert sphere falloff; tip dark-gray → near-black into void.
-    // Opaque — soft mid hazeEdge kept; no alpha dip at the silhouette.
-    float hazeEdge = pow(smoothstep(0.0, 0.72 + w * 16.0, muGeo), 1.15);
-    float tipAmt = pow(1.0 - hazeEdge, 1.50);
-    // Regular lit-ball limb (not flat disk). Floor soft so mid-rim stays gentle.
-    float limbDark = mix(0.22, 1.0, pow(smoothstep(0.0, 0.85 + w * 10.0, muGeo), 0.70));
+    // Sharper ball shadow against the NASA star map: thinner haze band, darker tip, less mid-rim mush.
+    // Still opaque with a short atmospheric tip — not a hard cut-out.
+    float hazeEdge = pow(smoothstep(0.0, 0.48 + w * 10.0, muGeo), 1.35);
+    float tipAmt = pow(1.0 - hazeEdge, 1.85);
+    // Lit-ball limb; slightly higher floor, tighter falloff so belts stay readable nearer the rim.
+    float limbDark = mix(0.30, 1.0, pow(smoothstep(0.0, 0.62 + w * 8.0, muGeo), 0.85));
     float terminator = pow(mu0, 0.75);
     vec3 lit = albedo * (0.025 + 1.06 * terminator) * limbDark;
-    // Soft mid taupe → near-black at outer tip (drop off into deep space).
-    vec3 hazeSoft = vec3(0.20, 0.18, 0.17);
-    vec3 hazeTip = vec3(0.015, 0.014, 0.013);
+    // Narrow taupe fringe → near-black tip into the starfield.
+    vec3 hazeSoft = vec3(0.12, 0.11, 0.105);
+    vec3 hazeTip = vec3(0.012, 0.011, 0.010);
     vec3 haze = mix(hazeSoft, hazeTip, tipAmt);
     vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
-    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.50);
+    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.28);
     vec3 col = mix(haze, mid, hazeEdge);
 
     // Occasional Juno-observed lightning flashes deep inside cyclonic belts (NEB ~ +12°, SEB ~ -14°)
@@ -705,12 +705,12 @@ void main() {
   vec3 sun = normalize(uSun);
   // Back-side shell: visible fragments are the far hemisphere, whose outward normal faces away from the viewer
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  // Thin faint atmospheric fringe (andrew-edge-ref-v2): soft silhouette into space, not a thick ring.
-  float fres = pow(1.0 - ndv, 6.0) * smoothstep(0.0, 0.18, ndv);
+  // Thinner atmospheric fringe against the star map (was softer pre-background).
+  float fres = pow(1.0 - ndv, 8.5) * smoothstep(0.0, 0.12, ndv);
   float sunlit = mix(0.55, 1.0, smoothstep(-0.40, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
   vec3 col = vec3(0.42, 0.38, 0.34);
-  gl_FragColor = vec4(col, rim * 0.028);
+  gl_FragColor = vec4(col, rim * 0.016);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
