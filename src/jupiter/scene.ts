@@ -1065,8 +1065,10 @@ export class JupiterScene {
     const cloudsMat = this.makeMat(
       CLOUD_FRAG,
       { uMap: cloudMap },
-      { side: THREE.FrontSide, relief: 1 },
+      { side: THREE.FrontSide, relief: 1, transparent: true },
     );
+    // Soft limb alpha needs blending; keep depthWrite so the disc still occludes stars.
+    cloudsMat.depthWrite = true;
     const gasMat = this.makeMat(GAS_FRAG, {}, { side: THREE.FrontSide });
     const metalMat = this.makeMat(METAL_FRAG, {}, { side: THREE.FrontSide });
     const fuzzyMat = this.makeMat(FUZZY_FRAG, {}, { transparent: true, disp: 0.06 });
@@ -1246,7 +1248,7 @@ export class JupiterScene {
       { transparent: true, blending: THREE.AdditiveBlending, side: THREE.BackSide },
     );
     const glowSegs = this.quality.segs.glow;
-    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.18, glowSegs[0], glowSegs[1])), glowMat);
+    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.055, glowSegs[0], glowSegs[1])), glowMat);
     glow.renderOrder = 6;
     glow.scale.set(1, 0.935, 1);
     this.scene.add(glow);
