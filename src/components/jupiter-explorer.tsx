@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { LAYERS, SPOTS } from "@/jupiter/layers";
 import { isLatin, layerText, spotText, uiText, useLang } from "@/jupiter/i18n";
 import type { FrameSpec, JupiterScene, PickInfo } from "@/jupiter/scene";
+import { BodyNav, bodyNavLabel } from "@/components/body-nav";
 import { LangSelect } from "@/components/lang-select";
 import { usePanelSplit } from "@/components/use-panel-split";
 
@@ -346,6 +347,7 @@ export function JupiterExplorer() {
           </div>
         </div>
         <p className="mt-2 max-w-sm text-sm leading-snug text-muted">{copy.lede}</p>
+        <BodyNav active="jupiter" lang={lang} label={bodyNavLabel(lang)} />
         <nav className="hud-links">
           <Link to="/mission" className="faq-link">
             {copy.mission}

@@ -958,6 +958,41 @@
   gap: 0 1.25rem;
 }
 
+.body-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+  pointer-events: auto;
+}
+
+.body-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.85rem;
+  padding: 0.15rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in oklab, var(--color-elev) 72%, transparent);
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.body-nav-link:hover {
+  color: var(--color-fg);
+  border-color: var(--color-line-strong);
+}
+
+.body-nav-link.is-active {
+  color: var(--color-fg);
+  border-color: color-mix(in oklab, #c9844a 55%, var(--color-line-strong));
+  background: color-mix(in oklab, #c9844a 18%, var(--color-elev));
+}
+
 .about-section {
   margin-top: 2.5rem;
   border-top: 1px solid var(--color-line);

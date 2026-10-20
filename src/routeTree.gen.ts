@@ -11,8 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as EarthRouteImport } from './routes/earth'
 import { Route as FaqRouteImport } from './routes/faq'
+import { Route as MarsRouteImport } from './routes/mars'
 import { Route as MissionRouteImport } from './routes/mission'
+import { Route as MoonRouteImport } from './routes/moon'
+import { Route as SunRouteImport } from './routes/sun'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -24,9 +28,19 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EarthRoute = EarthRouteImport.update({
+  id: '/earth',
+  path: '/earth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FaqRoute = FaqRouteImport.update({
   id: '/faq',
   path: '/faq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarsRoute = MarsRouteImport.update({
+  id: '/mars',
+  path: '/mars',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MissionRoute = MissionRouteImport.update({
@@ -34,39 +48,76 @@ const MissionRoute = MissionRouteImport.update({
   path: '/mission',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MoonRoute = MoonRouteImport.update({
+  id: '/moon',
+  path: '/moon',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SunRoute = SunRouteImport.update({
+  id: '/sun',
+  path: '/sun',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/earth': typeof EarthRoute
   '/faq': typeof FaqRoute
+  '/mars': typeof MarsRoute
   '/mission': typeof MissionRoute
+  '/moon': typeof MoonRoute
+  '/sun': typeof SunRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/earth': typeof EarthRoute
   '/faq': typeof FaqRoute
+  '/mars': typeof MarsRoute
   '/mission': typeof MissionRoute
+  '/moon': typeof MoonRoute
+  '/sun': typeof SunRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/earth': typeof EarthRoute
   '/faq': typeof FaqRoute
+  '/mars': typeof MarsRoute
   '/mission': typeof MissionRoute
+  '/moon': typeof MoonRoute
+  '/sun': typeof SunRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/faq' | '/mission'
+  fullPaths:
+    '/' | '/about' | '/earth' | '/faq' | '/mars' | '/mission' | '/moon' | '/sun'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/faq' | '/mission'
-  id: '__root__' | '/' | '/about' | '/faq' | '/mission'
+  to:
+    '/' | '/about' | '/earth' | '/faq' | '/mars' | '/mission' | '/moon' | '/sun'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/earth'
+    | '/faq'
+    | '/mars'
+    | '/mission'
+    | '/moon'
+    | '/sun'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  EarthRoute: typeof EarthRoute
   FaqRoute: typeof FaqRoute
+  MarsRoute: typeof MarsRoute
   MissionRoute: typeof MissionRoute
+  MoonRoute: typeof MoonRoute
+  SunRoute: typeof SunRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -85,11 +136,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/earth': {
+      id: '/earth'
+      path: '/earth'
+      fullPath: '/earth'
+      preLoaderRoute: typeof EarthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/faq': {
       id: '/faq'
       path: '/faq'
       fullPath: '/faq'
       preLoaderRoute: typeof FaqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mars': {
+      id: '/mars'
+      path: '/mars'
+      fullPath: '/mars'
+      preLoaderRoute: typeof MarsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mission': {
@@ -99,14 +164,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MissionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/moon': {
+      id: '/moon'
+      path: '/moon'
+      fullPath: '/moon'
+      preLoaderRoute: typeof MoonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sun': {
+      id: '/sun'
+      path: '/sun'
+      fullPath: '/sun'
+      preLoaderRoute: typeof SunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  EarthRoute: EarthRoute,
   FaqRoute: FaqRoute,
+  MarsRoute: MarsRoute,
   MissionRoute: MissionRoute,
+  MoonRoute: MoonRoute,
+  SunRoute: SunRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

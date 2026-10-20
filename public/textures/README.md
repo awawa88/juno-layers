@@ -8,11 +8,11 @@ Credit: NASA Earth Observatory / NASA Goddard Space Flight Center. Public domain
 
 # Moon textures
 
-`moon-lroc.webp` — NASA LROC WAC lunar color map (CGI Moon Kit 2019), resized to 512×256 WebP
-for the tiny to-scale Moon next to Earth. Mild contrast stretch applied so maria stay readable at a few on-screen pixels.
+`moon-lroc.webp` — NASA LROC WAC lunar color map (CGI Moon Kit 2019), **2048×1024** WebP
+for the Moon peel (and the tiny to-scale Moon beside Jupiter). `moon-lroc-mobile.webp` is 1024×512.
 
 Source: NASA Scientific Visualization Studio CGI Moon Kit (https://svs.gsfc.nasa.gov/4720),
-derived from LROC Wide Angle Camera Hapke-normalized mosaics with polar fill from LOLA albedo.
+`lroc_color_poles_2k.tif`, derived from LROC Wide Angle Camera Hapke-normalized mosaics with polar fill from LOLA albedo.
 Credit: NASA / Goddard Space Flight Center / SVS / ASU LROC. Public domain.
 
 
@@ -49,3 +49,23 @@ NASA Scientific Visualization Studio, "Deep Star Maps 2020" (SVS 4851, https://s
 Milky Way). Converted to sRGB WebP and toned dark (floor subtract 0.008, gain 0.9, gamma 0.7) so Jupiter stays the
 hero: 4096×2048 desktop (high tier), 2048×1024 medium/low tiers.
 Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.
+
+# Mars textures
+
+`mars-viking.webp` / `mars-viking-mobile.webp` — equirectangular Mars albedo (2048×1024 / 1024×512 WebP)
+used by the Mars peel. Sourced from Solar System Scope’s 2k Mars map (CC BY 4.0), itself derived from
+NASA / USGS Viking color mosaics and related public datasets.
+
+Source download: https://www.solarsystemscope.com/textures/download/2k_mars.jpg
+License: Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/).
+Underlying spacecraft data: NASA / USGS (public domain). Credit: Solar System Scope; NASA / USGS Viking.
+
+# Sun textures
+
+`sun-photosphere.webp` / `sun-photosphere-mobile.webp` — stylized photosphere equirectangular map
+(2048×1024 / 1024×512 WebP) for the Sun peel’s outermost shell. **Not a solid surface** — the
+photosphere is the visible layer of plasma where light escapes.
+
+Source download: https://www.solarsystemscope.com/textures/download/2k_sun.jpg
+License: Creative Commons Attribution 4.0. Credit: Solar System Scope (based on public solar imagery).
+A future pass may swap in an SDO / HMI intensitygram if preferred.
