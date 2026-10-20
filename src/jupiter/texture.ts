@@ -138,17 +138,18 @@ export function loadMoonAlbedo(): Promise<THREE.Texture> {
   return moonMapPromise;
 }
 
-/** Hubble OPAL Jupiter global map (equirectangular cloud albedo). */
+/** Hubble OPAL Jupiter global map (equirectangular cloud albedo). Desktop 4K; mobile 2K. */
 const JUPITER_CLOUD_MAP_URL = "/textures/jupiter-opal.webp";
+const JUPITER_CLOUD_MAP_MOBILE_URL = "/textures/jupiter-opal-mobile.webp";
 
-let jupiterCloudMapPromise: Promise<THREE.Texture> | null = null;
+const jupiterCloudMapPromises = new Map<string, Promise<THREE.Texture>>();
 
-/** Load the shared Jupiter cloud albedo once; ignores w/h (single lightweight asset). */
-export function loadJupiterCloudMap(): Promise<THREE.Texture> {
-  if (!jupiterCloudMapPromise) {
-    jupiterCloudMapPromise = new Promise<THREE.Texture>((resolve, reject) => {
+function loadJupiterCloudMapUrl(url: string): Promise<THREE.Texture> {
+  let promise = jupiterCloudMapPromises.get(url);
+  if (!promise) {
+    promise = new Promise<THREE.Texture>((resolve, reject) => {
       new THREE.TextureLoader().load(
-        JUPITER_CLOUD_MAP_URL,
+        url,
         (tex) => {
           tex.colorSpace = THREE.SRGBColorSpace;
           tex.wrapS = THREE.RepeatWrapping;
@@ -161,13 +162,22 @@ export function loadJupiterCloudMap(): Promise<THREE.Texture> {
         },
         undefined,
         (err) => {
-          jupiterCloudMapPromise = null;
+          jupiterCloudMapPromises.delete(url);
           reject(err);
         },
       );
     });
+    jupiterCloudMapPromises.set(url, promise);
   }
-  return jupiterCloudMapPromise;
+  return promise;
+}
+
+/**
+ * Load Jupiter cloud albedo. Prefer 4096×2048 on desktop; use 2048×1024 when
+ * `preferHighRes` is false (mobile / lower tiers) to keep bandwidth down.
+ */
+export function loadJupiterCloudMap(preferHighRes = true): Promise<THREE.Texture> {
+  return loadJupiterCloudMapUrl(preferHighRes ? JUPITER_CLOUD_MAP_URL : JUPITER_CLOUD_MAP_MOBILE_URL);
 }
 
 /**
@@ -176,7 +186,8 @@ export function loadJupiterCloudMap(): Promise<THREE.Texture> {
  */
 export function loadPlanetTexture(kind: TextureKind, w: number, h: number): Promise<THREE.Texture> {
   if (kind === "earth") return loadEarthBlueMarble();
-  if (kind === "cloud") return loadJupiterCloudMap();
+  // w>=3072 → desktop 4K OPAL; smaller tiers/mobile use 2K mobile asset
+  if (kind === "cloud") return loadJupiterCloudMap(w >= 3072);
   const key = `${kind}:${w}x${h}`;
   let pixels = cache.get(key);
   if (!pixels) {

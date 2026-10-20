@@ -590,7 +590,12 @@ export class JupiterScene {
 
   /** Swap a preview map for the full-resolution one once the worker has generated it. */
   private upgradeMap(uniform: THREE.IUniform<THREE.Texture>, kind: TextureKind): void {
-    const [w, h] = kind === "cloud" ? this.quality.cloudTex : this.quality.earthTex;
+    let [w, h] = kind === "cloud" ? this.quality.cloudTex : this.quality.earthTex;
+    // Desktop high tier gets 4K OPAL; mobile stays on 2K even if tier is high (bandwidth + GPU).
+    if (kind === "cloud" && isMobileViewport(this.canvas.clientWidth) && w >= 3072) {
+      w = 2048;
+      h = 1024;
+    }
     loadPlanetTexture(kind, w, h).then(
       (tex) => {
         if (this.dead) {

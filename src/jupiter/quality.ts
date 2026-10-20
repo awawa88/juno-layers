@@ -48,7 +48,7 @@ const PROFILES: Record<QualityTier, QualityProfile> = {
     minPixelRatio: 1,
     antialias: true,
     powerPreference: "high-performance",
-    cloudTex: [2048, 1024],
+    cloudTex: [4096, 2048],
     earthTex: [1024, 512],
     fbmOctaves: 5,
     segs: {
@@ -79,7 +79,7 @@ const PROFILES: Record<QualityTier, QualityProfile> = {
     minPixelRatio: 1,
     antialias: false,
     powerPreference: "default",
-    cloudTex: [1536, 768],
+    cloudTex: [2048, 1024],
     earthTex: [512, 256],
     fbmOctaves: 4,
     segs: {

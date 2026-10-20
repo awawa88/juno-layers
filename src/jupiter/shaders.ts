@@ -197,7 +197,12 @@ void main() {
   duy -= floor(duy + 0.5);
   // Shrink textureGrad derivatives so mips pick a sharper level on the NASA OPAL map
   // (belts/GRS read crisper; keep some mip AA to avoid shimmer/halos).
+  // High tier (desktop 4K) taps a slightly sharper mip; medium/low keep 0.50 for AA.
+#if QUALITY > 1
+  const float mipSharp = 0.42;
+#else
   const float mipSharp = 0.50;
+#endif
   vec3 tex = textureGrad(
     uMap,
     vec2(u, v),
