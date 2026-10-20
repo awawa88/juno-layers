@@ -18,14 +18,26 @@ Credit: NASA / Goddard Space Flight Center / SVS / ASU LROC. Public domain.
 
 # Jupiter textures
 
-`jupiter-opal.webp` — Hubble OPAL global Jupiter map (Rotation 1, 19 Jan 2015), baked to **4096×2048** WebP
-(desktop) from the 3600×1800 STScI RGB, rolled in longitude so the Great Red Spot aligns with the app's
-geometric GRS pick. Strong two-pass unsharp-mask (~1.5/110% then ~2.2/170%, thr 2–3; palette-preserving) after LANCZOS upsample so belts/GRS stay very crisp
-under mip sampling.
+Hubble OPAL global Jupiter map (2015 epoch "a", 19 Jan 2015), true-color F631N/F502N/F395N composite,
+native 3600×1800 (0.1°/px), AI-upscaled ×4 and baked to three tiers:
 
-`jupiter-opal-mobile.webp` — same bake pipeline at **2048×1024** for mobile / lower tiers (bandwidth).
+- `jupiter-opal-8k.webp` — **8192×4096**, desktop high tier when the GPU's `MAX_TEXTURE_SIZE` ≥ 8192.
+- `jupiter-opal.webp` — **4096×2048**, desktop fallback.
+- `jupiter-opal-mobile.webp` — **2048×1024**, phones, tablets and lower tiers.
 
-Source: NASA Science asset (https://science.nasa.gov/asset/hubble/jupiter-global-map-from-hubble-opal-data-rotation-1/),
-derived from HST WFC3/UVIS OPAL proposal 13937. Direct download used:
-https://assets.science.nasa.gov/dynamicimage/assets/science/missions/hubble/releases/2015/10/STScI-01EVT28CB7CN0CEYRV56WP1S6A.tif?w=3600&h=1598&fit=clip&crop=faces%2Cfocalpoint
-Credit: NASA, ESA, A. Simon (GSFC), M. Wong (UC Berkeley), and G. Orton (JPL-Caltech).
+Pipeline (build-time only, not shipped):
+1. Rolled +258 px in longitude so the Great Red Spot aligns with the app's geometric GRS pick.
+2. Seam-wrapped 128 px on each side, upscaled ×4 with Real-ESRGAN ncnn-vulkan v0.2.5.0
+   (`realesrgan-x4plus`, tile 256), padding cropped off → 14400×7200.
+3. Lanczos to 8192×4096, then blended 65% AI / 35% Lanczos of the original. Pure x4plus smooths away real
+   swirl structure inside the GRS; the blend keeps it while gaining crisp belt edges and festoons.
+   (`realesr-animevideov3` was also tested and was barely sharper than Lanczos.)
+4. Per-tier Lanczos downsample, light unsharp mask, WebP q93–95.
+
+The AI pass sharpens edges; it does not add real detail beyond Hubble's ~70 km/px resolution.
+
+Source: STScI MAST High Level Science Product OPAL (Outer Planet Atmospheres Legacy), HST WFC3/UVIS
+proposal 13937, doi:10.17909/T9G593 —
+https://archive.stsci.edu/hlsps/opal/cycle22/jupiter/hlsp_opal_hst_wfc3-uvis_jupiter-2015a_f395n-f502n-f631n_v1_globalmap.tif
+Credit: NASA, ESA, A. Simon (GSFC), M. Wong (UC Berkeley), and G. Orton (JPL-Caltech); OPAL program.
+Real-ESRGAN © Xintao Wang et al., BSD-3-Clause (https://github.com/xinntao/Real-ESRGAN).

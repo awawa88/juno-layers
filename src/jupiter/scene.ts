@@ -14,7 +14,14 @@ import {
   VERT,
 } from "@/jupiter/shaders";
 import { qualityProfile, type QualityProfile } from "@/jupiter/quality";
-import { createPlanetTexture, createSpriteTexture, loadMoonAlbedo, loadPlanetTexture, type TextureKind } from "@/jupiter/texture";
+import {
+  createPlanetTexture,
+  createSpriteTexture,
+  loadMoonAlbedo,
+  loadPlanetTexture,
+  pickJupiterCloudMapWidth,
+  type TextureKind,
+} from "@/jupiter/texture";
 
 export type PickInfo = {
   layer: number;
@@ -591,10 +598,11 @@ export class JupiterScene {
   /** Swap a preview map for the full-resolution one once the worker has generated it. */
   private upgradeMap(uniform: THREE.IUniform<THREE.Texture>, kind: TextureKind): void {
     let [w, h] = kind === "cloud" ? this.quality.cloudTex : this.quality.earthTex;
-    // Desktop high tier gets 4K OPAL; mobile stays on 2K even if tier is high (bandwidth + GPU).
-    if (kind === "cloud" && isMobileViewport(this.canvas.clientWidth) && w >= 3072) {
-      w = 2048;
-      h = 1024;
+    // Desktop high tier gets 8K OPAL when the GPU allows it; mobile stays on 2K even if tier is high.
+    if (kind === "cloud") {
+      const requested = isMobileViewport(this.canvas.clientWidth) ? 2048 : w >= 3072 ? 8192 : w;
+      w = pickJupiterCloudMapWidth(requested, this.renderer.capabilities.maxTextureSize);
+      h = w / 2;
     }
     loadPlanetTexture(kind, w, h).then(
       (tex) => {

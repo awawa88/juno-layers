@@ -138,9 +138,21 @@ export function loadMoonAlbedo(): Promise<THREE.Texture> {
   return moonMapPromise;
 }
 
-/** Hubble OPAL Jupiter global map (equirectangular cloud albedo). Desktop 4K; mobile 2K. */
-const JUPITER_CLOUD_MAP_URL = "/textures/jupiter-opal.webp";
-const JUPITER_CLOUD_MAP_MOBILE_URL = "/textures/jupiter-opal-mobile.webp";
+/** Hubble OPAL Jupiter global map (equirectangular cloud albedo), Real-ESRGAN upscaled. */
+const JUPITER_CLOUD_MAP_URLS = {
+  8192: "/textures/jupiter-opal-8k.webp",
+  4096: "/textures/jupiter-opal.webp",
+  2048: "/textures/jupiter-opal-mobile.webp",
+} as const;
+
+export type JupiterCloudMapWidth = keyof typeof JUPITER_CLOUD_MAP_URLS;
+
+/** Largest cloud map that fits the requested width and the GPU's texture limit. */
+export function pickJupiterCloudMapWidth(requested: number, maxTextureSize: number): JupiterCloudMapWidth {
+  if (requested >= 8192 && maxTextureSize >= 8192) return 8192;
+  if (requested >= 3072 && maxTextureSize >= 4096) return 4096;
+  return 2048;
+}
 
 const jupiterCloudMapPromises = new Map<string, Promise<THREE.Texture>>();
 
@@ -172,15 +184,12 @@ function loadJupiterCloudMapUrl(url: string): Promise<THREE.Texture> {
   return promise;
 }
 
-/**
- * Load Jupiter cloud albedo. Prefer 4096×2048 on desktop; use 2048×1024 when
- * `preferHighRes` is false (mobile / lower tiers) to keep bandwidth down.
- */
-export function loadJupiterCloudMap(preferHighRes = true): Promise<THREE.Texture> {
-  return loadJupiterCloudMapUrl(preferHighRes ? JUPITER_CLOUD_MAP_URL : JUPITER_CLOUD_MAP_MOBILE_URL).then((tex) => {
-    // Desktop 4K: nearest-mip (no blend between levels) reads crisper on belts/GRS.
+/** Load Jupiter cloud albedo at 8192, 4096 or 2048 px wide (see pickJupiterCloudMapWidth). */
+export function loadJupiterCloudMap(width: JupiterCloudMapWidth = 4096): Promise<THREE.Texture> {
+  return loadJupiterCloudMapUrl(JUPITER_CLOUD_MAP_URLS[width]).then((tex) => {
+    // Desktop 4K/8K: nearest-mip (no blend between levels) reads crisper on belts/GRS.
     // Mobile keeps trilinear to avoid shimmer on small screens.
-    if (preferHighRes) {
+    if (width >= 4096) {
       tex.minFilter = THREE.LinearMipmapNearestFilter;
       tex.needsUpdate = true;
     }
@@ -194,8 +203,7 @@ export function loadJupiterCloudMap(preferHighRes = true): Promise<THREE.Texture
  */
 export function loadPlanetTexture(kind: TextureKind, w: number, h: number): Promise<THREE.Texture> {
   if (kind === "earth") return loadEarthBlueMarble();
-  // w>=3072 → desktop 4K OPAL; smaller tiers/mobile use 2K mobile asset
-  if (kind === "cloud") return loadJupiterCloudMap(w >= 3072);
+  if (kind === "cloud") return loadJupiterCloudMap(pickJupiterCloudMapWidth(w, 8192));
   const key = `${kind}:${w}x${h}`;
   let pixels = cache.get(key);
   if (!pixels) {
