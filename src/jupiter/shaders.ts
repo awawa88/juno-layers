@@ -243,14 +243,19 @@ void main() {
     float mu = clamp(dot(geomN, view), 0.0, 1.0);
     float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
 
-    // Mild spherical depth + soft gray rim (no dark/black collar). Glow shell softens silhouette further.
-    float limbDark = mix(0.68, 1.0, pow(smoothstep(0.0, 0.42, mu), 0.70));
+    // OPAL limb (andrew-edge-ref-v2): even front lighting; muted warm gray-brown haze at silhouette.
+    // Use vNrm (inverse-transpose) for mu — raw modelMatrix*vObj breaks on oblate scale.
+    float muGeo = clamp(dot(normalize(vNrm), view), 0.0, 1.0);
+    float w = max(fwidth(muGeo), 1e-4);
+    float hazeEdge = pow(smoothstep(0.0, 0.72 + w * 16.0, muGeo), 1.15);
+    float limbDark = mix(0.95, 1.0, hazeEdge);
     float terminator = pow(mu0, 0.75);
-    vec3 limbTint = mix(vec3(0.86, 0.84, 0.82), vec3(1.0), pow(mu, 0.45));
-    vec3 lit = albedo * limbTint * (0.025 + 1.06 * terminator) * limbDark;
-    float rimAmt = 1.0 - smoothstep(0.0, 0.38, mu);
-    vec3 softGray = vec3(0.36, 0.35, 0.34);
-    vec3 col = mix(lit, softGray, rimAmt * 0.48);
+    vec3 lit = albedo * (0.025 + 1.06 * terminator) * limbDark;
+    // Muted warm gray-brown like andrew-edge-ref-v2 (soft haze, not black collar).
+    vec3 haze = vec3(0.33, 0.30, 0.28);
+    vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
+    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.65);
+    vec3 col = mix(haze, mid, hazeEdge);
 
     // Occasional Juno-observed lightning flashes deep inside cyclonic belts (NEB ~ +12°, SEB ~ -14°)
     float beltZone = gauss(deg, 12.0, 3.0) + gauss(deg, -14.0, 3.0);
@@ -262,7 +267,7 @@ void main() {
       if (bolt > 0.01) {
         vec2 cellUv = fract(vec2(baseLon * 4.5, lat * 18.0)) - 0.5;
         float spotGlow = exp(-dot(cellUv, cellUv) * 18.0);
-        col += vec3(0.55, 0.78, 1.0) * bolt * spotGlow * beltZone * limbDark * 0.55;
+        col += vec3(0.55, 0.78, 1.0) * bolt * spotGlow * beltZone * limbDark * 0.55 * hazeEdge;
       }
     }
 
@@ -687,13 +692,12 @@ void main() {
   vec3 sun = normalize(uSun);
   // Back-side shell: visible fragments are the far hemisphere, whose outward normal faces away from the viewer
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  // Soft gray overlay on the disc limb (FrontSide + NormalBlending, depthTest off).
-  // Pulls the hard silhouette toward soft gray, then fades into space — not a thick halo.
-  float fres = pow(1.0 - ndv, 1.6) * smoothstep(0.0, 0.70, ndv);
-  float sunlit = mix(0.75, 1.0, smoothstep(-0.30, 0.25, dot(n, sun)));
+  // Thin faint atmospheric fringe (andrew-edge-ref-v2): soft silhouette into space, not a thick ring.
+  float fres = pow(1.0 - ndv, 6.0) * smoothstep(0.0, 0.18, ndv);
+  float sunlit = mix(0.55, 1.0, smoothstep(-0.40, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  vec3 col = vec3(0.36, 0.35, 0.34);
-  gl_FragColor = vec4(col, rim * 0.62);
+  vec3 col = vec3(0.55, 0.50, 0.45);
+  gl_FragColor = vec4(col, rim * 0.035);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

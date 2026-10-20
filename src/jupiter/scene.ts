@@ -1413,13 +1413,11 @@ export class JupiterScene {
     const glowMat = this.makeMat(
       GLOW_FRAG,
       {},
-      { transparent: true, blending: THREE.NormalBlending, side: THREE.FrontSide },
+      { transparent: true, blending: THREE.AdditiveBlending, side: THREE.BackSide },
     );
-    glowMat.depthWrite = false;
-    glowMat.depthTest = false;
     const glowSegs = this.quality.segs.glow;
-    // FrontSide shell over the disc so soft-gray NormalBlend softens the hard silhouette.
-    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.02, glowSegs[0], glowSegs[1])), glowMat);
+    // Thin quiet outer shell — faint atmospheric AA, not a halo ring.
+    const glow = new THREE.Mesh(this.track(new THREE.SphereGeometry(OUTER + 0.035, glowSegs[0], glowSegs[1])), glowMat);
     glow.renderOrder = 6;
     glow.scale.set(1, 0.935, 1);
     this.scene.add(glow);
