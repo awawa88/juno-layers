@@ -91,6 +91,18 @@ function isVercelSystemHost(host) {
   );
 }
 
+/**
+ * Share-card host for apps served straight from a *.vercel.app alias (no
+ * VITE_PUBLIC_HOSTNAME): use the request host so each alias points at itself;
+ * on Vercel with no usable host, fall back to the canonical alias.
+ */
+const VERCEL_SHARE_FALLBACK_HOST = "jupiter-layers.vercel.app";
+function vercelAppShareHost(hostHeader) {
+  const host = String(hostHeader ?? "").split(",")[0].trim().split(":")[0].toLowerCase();
+  if (/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.vercel\.app$/.test(host)) return host;
+  return process.env?.VERCEL ? VERCEL_SHARE_FALLBACK_HOST : "";
+}
+
 /** Hostname suitable for absolute og:image URLs. Preview guests (X-Forwarded-Host) are allowed. */
 export function publicAppHost(hostHeader) {
   const host = String(hostHeader ?? "")
@@ -347,7 +359,7 @@ export function grokOgHeadTags({
   cwd = process.cwd(),
 } = {}) {
   const title = resolveOgTitle(site, appName, host, documentTitle);
-  const publicHost = resolvePublicHost(host);
+  const publicHost = resolvePublicHost(host) || vercelAppShareHost(host);
   const tags = [
     `<meta name="twitter:card" content="summary_large_image">`,
     `<meta property="og:title" content="${escapeHtml(title)}">`,
@@ -368,6 +380,7 @@ export function grokOgHeadTags({
     const color = !custom ? placeholderCardColor(site) : "";
     if (color) image += `&color=${encodeURIComponent(color)}`;
     tags.push(`<meta property="og:image" content="${escapeHtml(image)}">`);
+    tags.push(`<meta name="twitter:image" content="${escapeHtml(image)}">`);
     tags.push(`<meta property="og:image:width" content="1200">`);
     tags.push(`<meta property="og:image:height" content="630">`);
     const banner = String(site.banner ?? "").trim();

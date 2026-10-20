@@ -286,7 +286,7 @@ test("published VITE_PUBLIC_HOSTNAME wins over request Host for og:image", () =>
   }
 });
 
-test("vercel Host without a public hostname emits no og:image", () => {
+test("vercel Host without a public hostname points og:image at itself", () => {
   const prev = process.env.VITE_PUBLIC_HOSTNAME;
   delete process.env.VITE_PUBLIC_HOSTNAME;
   try {
@@ -294,8 +294,11 @@ test("vercel Host without a public hostname emits no og:image", () => {
       host: "01a020b6-803a-71a2-bb47-e2bec57eb9a2-662k8x1l1-xai-org.vercel.app",
       site: { title: "RACK", card: "custom" },
     });
-    assert.doesNotMatch(out, /property="og:image"/);
-    assert.doesNotMatch(out, /vercel\.app/);
+    assert.match(
+      out,
+      /property="og:image" content="https:\/\/01a020b6-803a-71a2-bb47-e2bec57eb9a2-662k8x1l1-xai-org\.vercel\.app\/og\.jpg"/,
+    );
+    assert.match(out, /name="twitter:image" content="https:\/\/[^"]+\.vercel\.app\/og\.jpg"/);
   } finally {
     if (prev === undefined) delete process.env.VITE_PUBLIC_HOSTNAME;
     else process.env.VITE_PUBLIC_HOSTNAME = prev;
