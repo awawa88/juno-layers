@@ -247,19 +247,20 @@ void main() {
     // Use vNrm (inverse-transpose) for mu — raw modelMatrix*vObj breaks on oblate scale.
     float muGeo = clamp(dot(normalize(vNrm), view), 0.0, 1.0);
     float w = max(fwidth(muGeo), 1e-4);
-    // Keep wide soft hazeEdge (nice transition). Darker only toward silhouette tip.
+    // Soft ball shadow (Andrew): Minnaert sphere falloff; tip dark-gray → near-black into void.
+    // Opaque — soft mid hazeEdge kept; no alpha dip at the silhouette.
     float hazeEdge = pow(smoothstep(0.0, 0.72 + w * 16.0, muGeo), 1.15);
-    // Mid-rim stays gentle; tip gets extra Minnaert (pow concentrates darkening at hazeEdge~0).
-    float tipAmt = pow(1.0 - hazeEdge, 1.85);
-    float limbDark = mix(0.90, 1.0, pow(hazeEdge, 0.85)) * mix(1.0, 0.78, tipAmt);
+    float tipAmt = pow(1.0 - hazeEdge, 1.50);
+    // Regular lit-ball limb (not flat disk). Floor soft so mid-rim stays gentle.
+    float limbDark = mix(0.22, 1.0, pow(smoothstep(0.0, 0.85 + w * 10.0, muGeo), 0.70));
     float terminator = pow(mu0, 0.75);
     vec3 lit = albedo * (0.025 + 1.06 * terminator) * limbDark;
-    // Soft mid taupe → darker taupe only at outer tip (not whole-disk collar).
-    vec3 hazeSoft = vec3(0.24, 0.22, 0.20);
-    vec3 hazeTip = vec3(0.11, 0.10, 0.09);
+    // Soft mid taupe → near-black at outer tip (drop off into deep space).
+    vec3 hazeSoft = vec3(0.20, 0.18, 0.17);
+    vec3 hazeTip = vec3(0.015, 0.014, 0.013);
     vec3 haze = mix(hazeSoft, hazeTip, tipAmt);
     vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
-    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.68);
+    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.50);
     vec3 col = mix(haze, mid, hazeEdge);
 
     // Occasional Juno-observed lightning flashes deep inside cyclonic belts (NEB ~ +12°, SEB ~ -14°)
