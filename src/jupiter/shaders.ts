@@ -683,8 +683,11 @@ void main() {
   duy -= floor(duy + 0.5);
   vec4 samp = textureGrad(uMap, vec2(u, v), vec2(dux, dFdx(v)), vec2(duy, dFdy(v)));
   vec3 surface = samp.rgb;
-  // Alpha encodes bathymetry / elevation: < 0.48 is ocean, >= 0.52 is land + elevation
-  float landMask = smoothstep(0.46, 0.54, samp.a);
+  // Alpha = land/ocean mask from Blue Marble bake (<~0.48 ocean, >~0.52 land).
+  // Opaque JPEG fallback: blue-dominant RGB → ocean (keeps specular + city lights).
+  float landFromAlpha = smoothstep(0.46, 0.54, samp.a);
+  float oceanFromRgb = smoothstep(0.02, 0.10, samp.b - max(samp.r, samp.g));
+  float landMask = mix(1.0 - oceanFromRgb, landFromAlpha, step(0.0, 0.995 - samp.a));
   float oceanMask = 1.0 - landMask;
 
   // Dynamic 3D procedural weather systems drifting and evolving over the rotating globe

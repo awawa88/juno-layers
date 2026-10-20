@@ -79,11 +79,41 @@ function generate(kind: TextureKind, w: number, h: number): Promise<Uint8Clamped
   }).then((data) => data ?? generateChunked(kind, w, h));
 }
 
+/** NASA Blue Marble equirectangular (RGB + baked land/ocean alpha). */
+const EARTH_MAP_URL = "/textures/earth-blue-marble.webp";
+
+let earthMapPromise: Promise<THREE.Texture> | null = null;
+
+/** Load the shared Earth albedo once; ignores w/h (single lightweight asset). */
+export function loadEarthBlueMarble(): Promise<THREE.Texture> {
+  if (!earthMapPromise) {
+    earthMapPromise = new Promise<THREE.Texture>((resolve, reject) => {
+      new THREE.TextureLoader().load(
+        EARTH_MAP_URL,
+        (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
+          tex.anisotropy = 8;
+          resolve(tex);
+        },
+        undefined,
+        (err) => {
+          earthMapPromise = null;
+          reject(err);
+        },
+      );
+    });
+  }
+  return earthMapPromise;
+}
+
 /**
- * Full-resolution map generated off the main thread (Web Worker, or chunked between frames as a fallback).
- * Pixels are cached for the session, so returning to the explorer is instant.
+ * Full-resolution map: Jupiter clouds stay procedural (worker/chunked);
+ * Earth uses the NASA Blue Marble asset (preview stays procedural via createPlanetTexture).
  */
-export function loadPlanetTexture(kind: TextureKind, w: number, h: number): Promise<THREE.CanvasTexture> {
+export function loadPlanetTexture(kind: TextureKind, w: number, h: number): Promise<THREE.Texture> {
+  if (kind === "earth") return loadEarthBlueMarble();
   const key = `${kind}:${w}x${h}`;
   let pixels = cache.get(key);
   if (!pixels) {
