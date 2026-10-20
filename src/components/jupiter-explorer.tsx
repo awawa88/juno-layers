@@ -337,9 +337,11 @@ export function JupiterExplorer() {
               type="button"
               className="tilt-toggle"
               aria-pressed={tiltOn}
+              aria-label={tiltOn ? `${copy.tilt} on` : `${copy.tilt} off`}
               onClick={toggleTilt}
             >
-              {tiltOn ? copy.tiltOff : copy.tilt}
+              <span className="tilt-light" aria-hidden="true" />
+              {copy.tilt}
             </button>
           </div>
         </div>
