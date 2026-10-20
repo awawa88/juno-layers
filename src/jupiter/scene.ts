@@ -14,6 +14,7 @@ import {
   VERT,
 } from "@/jupiter/shaders";
 import { qualityProfile, type QualityProfile } from "@/jupiter/quality";
+import { classifyDevice } from "@/jupiter/orientation";
 import {
   createPlanetTexture,
   createSpriteTexture,
@@ -498,7 +499,7 @@ export class JupiterScene {
       // landscape iPad/tablet tipping matches the portrait-phone wallpaper convention.
       // Pass gamma so landscape fallback can pick 90 vs −90 when angle APIs lie/missing.
       // Normalize to 0..359 so window.orientation −90 and screen angle 270 compare equal.
-      const angleRaw = JupiterScene.screenAngle(e.gamma);
+      const angleRaw = JupiterScene.screenAngle(e.gamma, e.beta);
       const angle = ((angleRaw % 360) + 360) % 360;
       if (this.tiltScreenAngle != null && this.tiltScreenAngle !== angle) {
         this.tiltBaseBeta = null;
@@ -958,6 +959,24 @@ export class JupiterScene {
     return s * (linearMax + room * Math.tanh((a - linearMax) / Math.max(room, 1e-6)));
   }
 
+  /** Android Chrome / WebView (not iOS, not desktop). */
+  private static isAndroid(): boolean {
+    return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  }
+
+  /** Android tablet only — iPhone/iPad paths must stay untouched. */
+  private static isAndroidTablet(): boolean {
+    return JupiterScene.isAndroid() && classifyDevice() === "tablet";
+  }
+
+  private static viewportLandscape(): boolean {
+    return (
+      (typeof window.matchMedia === "function" &&
+        window.matchMedia("(orientation: landscape)").matches) ||
+      window.innerWidth > window.innerHeight
+    );
+  }
+
   /**
    * Clockwise screen rotation from device natural portrait (degrees).
    *
@@ -969,23 +988,44 @@ export class JupiterScene {
    *
    * `hintGamma` (device-fixed) disambiguates 90 vs −90 when APIs are missing/0 but the
    * viewport is already landscape (device on its side ⇒ |gamma| ≫ |beta|).
+   *
+   * Android tablets often use landscape as the *natural* orientation, so both APIs
+   * report angle 0 while the viewport is landscape. Many OEMs still emit DOE on
+   * portrait-primary hardware axes (upright landscape ⇒ |gamma| ≫ |beta|). Leaving
+   * remap at identity then maps tip-top into orbitY — feels weak on the expected axis.
+   * iOS never needs this: iPad reports ±90 in landscape. Gated to Android tablet only.
    */
-  private static screenAngle(hintGamma?: number | null): number {
+  private static screenAngle(hintGamma?: number | null, hintBeta?: number | null): number {
     const wo = (window as Window & { orientation?: number }).orientation;
-    if (typeof wo === "number") return wo;
-
     const so = typeof screen !== "undefined" ? screen.orientation : undefined;
-    if (so && typeof so.angle === "number") return so.angle;
+    let angle: number | null = typeof wo === "number" ? wo : null;
+    if (angle == null && so && typeof so.angle === "number") angle = so.angle;
 
-    const landscape =
-      (typeof window.matchMedia === "function" &&
-        window.matchMedia("(orientation: landscape)").matches) ||
-      window.innerWidth > window.innerHeight;
-    if (!landscape) return 0;
-    if (typeof hintGamma === "number" && Math.abs(hintGamma) > 45) {
-      return hintGamma >= 0 ? 90 : -90;
+    const landscape = JupiterScene.viewportLandscape();
+
+    if (angle == null) {
+      if (!landscape) return 0;
+      if (typeof hintGamma === "number" && Math.abs(hintGamma) > 45) {
+        return hintGamma >= 0 ? 90 : -90;
+      }
+      return 90;
     }
-    return 90;
+
+    // Android tablet + landscape + natural angle 0: pick 90/−90 from gamma when the
+    // device is clearly on its portrait-primary side (|γ|≫|β|). If β≈90,γ≈0 the OEM
+    // already uses natural-frame DOE and identity remap is correct — leave angle 0.
+    if (JupiterScene.isAndroidTablet() && landscape) {
+      const a = ((angle % 360) + 360) % 360;
+      if (a < 45 || a >= 315) {
+        const g = typeof hintGamma === "number" ? hintGamma : 0;
+        const b = typeof hintBeta === "number" ? hintBeta : 0;
+        if (Math.abs(g) > 45 && Math.abs(g) > Math.abs(b) + 15) {
+          return g >= 0 ? 90 : -90;
+        }
+      }
+    }
+
+    return angle;
   }
 
   /**
@@ -997,7 +1037,7 @@ export class JupiterScene {
   private static screenRelativeTilt(
     beta: number,
     gamma: number,
-    angle = JupiterScene.screenAngle(gamma),
+    angle = JupiterScene.screenAngle(gamma, beta),
   ): { beta: number; gamma: number } {
     const a = ((angle % 360) + 360) % 360;
     if (a >= 45 && a < 135) {
@@ -1050,6 +1090,14 @@ export class JupiterScene {
     this.tiltHaveDelta = true;
     dBeta = JupiterScene.softSaturateDeg(dBeta);
     dGamma = JupiterScene.softSaturateDeg(dGamma);
+    // Android tablets often under-report DOE tip magnitude vs iPhone (sensor fusion +
+    // landscape Euler). Slight gain, then re-saturate so soft ±30°/±36° envelope holds.
+    // iPhone / iPad: gain 1 (unchanged).
+    if (JupiterScene.isAndroidTablet()) {
+      const gain = 1.35;
+      dBeta = JupiterScene.softSaturateDeg(dBeta * gain);
+      dGamma = JupiterScene.softSaturateDeg(dGamma * gain);
+    }
     this.tiltTargetX = THREE.MathUtils.degToRad(-dBeta);
     this.tiltTargetY = THREE.MathUtils.degToRad(dGamma);
     this.tiltActive = true;
@@ -1068,9 +1116,13 @@ export class JupiterScene {
   }
 
   private attachOrientationListeners(): void {
-    // Single source only: deviceorientation (relative). Also listening to absolute — or starting
-    // RelativeOrientationSensor in parallel — mixed frames with different bases and bounced
-    // tiltTarget between ±clamp rails when over-tilting.
+    // Single source only — mixing DOE + absolute/ROS bounced tiltTarget between rails.
+    // Android tablet: prefer RelativeOrientationSensor @ 60Hz in screen frame (avoids Euler
+    // gimbal near landscape γ≈±90 that feels weak/jerky). iOS keeps classic DOE only.
+    if (JupiterScene.isAndroidTablet()) {
+      this.startRelativeOrientationSensor(60);
+      if (this.relativeOrientationSensor) return;
+    }
     window.addEventListener("deviceorientation", this.onDeviceOrientation);
   }
 
@@ -1078,7 +1130,7 @@ export class JupiterScene {
    * Android Chrome (and some tablets) expose RelativeOrientationSensor when
    * Permissions-Policy allows accelerometer/gyroscope. Optional fallback.
    */
-  private startRelativeOrientationSensor(): void {
+  private startRelativeOrientationSensor(frequency = 60): void {
     if (this.relativeOrientationSensor) return;
     type ROS = new (opts?: { frequency?: number; referenceFrame?: string }) => {
       start: () => void;
@@ -1089,7 +1141,8 @@ export class JupiterScene {
     const Ctor = (window as unknown as { RelativeOrientationSensor?: ROS }).RelativeOrientationSensor;
     if (!Ctor) return;
     try {
-      const sensor = new Ctor({ frequency: 30, referenceFrame: "screen" });
+      // Screen frame ⇒ pitch/roll already display-relative; skip screenRelativeTilt.
+      const sensor = new Ctor({ frequency, referenceFrame: "screen" });
       sensor.addEventListener("reading", () => {
         const [x, y, z, w] = sensor.quaternion;
         // Quaternion → pitch (beta-like) / roll (gamma-like) in degrees.
@@ -1107,6 +1160,8 @@ export class JupiterScene {
           /* ignore */
         }
         this.relativeOrientationSensor = null;
+        // ROS failed after start — fall back to classic DOE (Android tablet path).
+        window.addEventListener("deviceorientation", this.onDeviceOrientation);
       });
       sensor.start();
       this.relativeOrientationSensor = sensor;
@@ -2086,7 +2141,10 @@ export class JupiterScene {
     const idleFps = this.quality.idleFps;
     if (idleFps > 0 && time - this.lastRenderMs < 1000 / idleFps - 4 && this.isIdle()) return;
     this.lastRenderMs = time;
-    this.adaptResolution(time);
+    // Android tablet gyro: skip dynamic res drops mid-tilt (pixel-ratio hitch reads as lag).
+    if (!(JupiterScene.isAndroidTablet() && (this.tiltActive || this.rmbTilting))) {
+      this.adaptResolution(time);
+    }
     this.timer.update(time);
     // Undo last frame's viewpoint micro-orbit so OrbitControls/tour/intro never see it (no accumulation).
     if (this.camOrbitOn) {
