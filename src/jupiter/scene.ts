@@ -449,10 +449,11 @@ export class JupiterScene {
         const dy = e.clientY - this.rmbLastY;
         this.rmbLastX = e.clientX;
         this.rmbLastY = e.clientY;
-        // Very small nudge — same envelope as device tilt.
-        const sens = 0.0008;
-        this.tiltTargetY = THREE.MathUtils.clamp(this.tiltTargetY + dx * sens, -0.09, 0.09);
-        this.tiltTargetX = THREE.MathUtils.clamp(this.tiltTargetX + dy * sens, -0.09, 0.09);
+        // Same ±18° envelope as gyro (radians); mouse nudges accumulate toward the clamp.
+        const maxRad = THREE.MathUtils.degToRad(18);
+        const sens = 0.0016;
+        this.tiltTargetY = THREE.MathUtils.clamp(this.tiltTargetY + dx * sens, -maxRad, maxRad);
+        this.tiltTargetX = THREE.MathUtils.clamp(this.tiltTargetX + dy * sens, -maxRad, maxRad);
         this.lastActiveMs = performance.now();
         return;
       }
@@ -916,19 +917,27 @@ export class JupiterScene {
     this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), active);
   }
 
-  /** Map device pitch/roll (degrees) into the tiny planet sway targets. */
+  /**
+   * Map device pitch/roll (degrees) → camera orbit (radians), ~1:1 within ±18°.
+   * Baseline = first sample (held pose), so values are relative and don’t drift with gravity.
+   *
+   * iPhone wallpaper / window convention (portrait, phone as a window onto Jupiter):
+   * - Tip top of phone toward you (beta↓) → look up → see more of Jupiter’s top (north)
+   * - Tip left edge toward you (gamma↓) → look left → see more of Jupiter’s left
+   * (Opposite of “content fixed in space” wallpaper shift; matches “screen is a window.”)
+   */
   private applyTiltDegrees(beta: number, gamma: number): void {
     if (!this.tiltEnabled || this.reduce || this.dead) return;
     if (this.tiltBaseBeta == null) {
       this.tiltBaseBeta = beta;
       this.tiltBaseGamma = gamma;
     }
-    const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -28, 28);
-    const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -28, 28);
-    // ~±5° max sway — readable iPhone-camera parallax, not a flight sim
-    const sens = 0.0036;
-    this.tiltTargetX = THREE.MathUtils.clamp(-dBeta * sens, -0.09, 0.09);
-    this.tiltTargetY = THREE.MathUtils.clamp(dGamma * sens, -0.09, 0.09);
+    const maxDeg = 18;
+    const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -maxDeg, maxDeg);
+    const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -maxDeg, maxDeg);
+    // Degrees → radians 1:1 (cam-orbit gain is 1 so phone° ≈ viewpoint°)
+    this.tiltTargetX = THREE.MathUtils.degToRad(-dBeta);
+    this.tiltTargetY = THREE.MathUtils.degToRad(dGamma);
     this.tiltActive = true;
     // Keep the render loop awake while the device is tilting (idleFps would otherwise skip frames).
     this.lastActiveMs = performance.now();
@@ -2064,7 +2073,7 @@ export class JupiterScene {
         this.camOrbitY += ((on ? this.tiltTargetY : 0) - this.camOrbitY) * k;
       }
       if (Math.abs(this.camOrbitX) > 1e-5 || Math.abs(this.camOrbitY) > 1e-5) {
-        const gain = 1.4; // full clamp (0.09 rad) ≈ 7.2° — stronger spatial pop, still not a flight sim
+        const gain = 1; // tiltTarget already in radians (gyro ≈1:1°; RMB uses same units)
         this.camOrbitBase.copy(this.camera.position);
         const off = this.camOrbitOff.copy(this.camera.position).sub(this.controls.target);
         const right = this.camOrbitAxis.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
@@ -2077,7 +2086,8 @@ export class JupiterScene {
       }
       // Tiny FOV breathe with tilt magnitude (~0.4° at full tilt) — depth pop without dolly fight.
       const tiltMag = Math.hypot(this.camOrbitX, this.camOrbitY);
-      const fovTarget = this.baseFov + Math.min(0.45, tiltMag * 4.5);
+      // Cap ~0.45° at full ±18° tilt (tiltMag≈0.314)
+      const fovTarget = this.baseFov + Math.min(0.45, tiltMag * 1.4);
       if (Math.abs(this.camera.fov - fovTarget) > 0.01) {
         this.camera.fov = fovTarget;
         this.camera.updateProjectionMatrix();
