@@ -287,6 +287,7 @@ export class JupiterScene {
   private tiltTried = false;
   private tiltBaseBeta: number | null = null;
   private tiltBaseGamma: number | null = null;
+  private relativeOrientationSensor: { start: () => void; stop: () => void } | null = null;
   private readonly onDeviceOrientation: (e: DeviceOrientationEvent) => void;
   private readonly onTiltGesture: () => void;
   /** Desktop: right-mouse drag for the same tiny parallax as device tilt. */
@@ -458,21 +459,9 @@ export class JupiterScene {
     };
     // iPhone-camera-style parallax: subtle planet sway from device tilt (iPad/iPhone/Android).
     this.onDeviceOrientation = (e: DeviceOrientationEvent) => {
-      if (this.reduce || this.dead) return;
-      const beta = e.beta;
-      const gamma = e.gamma;
-      if (beta == null || gamma == null) return;
-      if (this.tiltBaseBeta == null) {
-        this.tiltBaseBeta = beta;
-        this.tiltBaseGamma = gamma;
-      }
-      const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -28, 28);
-      const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -28, 28);
-      // ~±5° max sway — readable iPhone-camera parallax, not a flight sim
-      const sens = 0.0036;
-      this.tiltTargetX = THREE.MathUtils.clamp(-dBeta * sens, -0.09, 0.09);
-      this.tiltTargetY = THREE.MathUtils.clamp(dGamma * sens, -0.09, 0.09);
-      this.tiltActive = true;
+      // Android often sends a few null frames before beta/gamma populate.
+      if (e.beta == null || e.gamma == null) return;
+      this.applyTiltDegrees(e.beta, e.gamma);
     };
     this.onTiltGesture = () => {
       void this.enableTiltParallax();
@@ -849,14 +838,91 @@ export class JupiterScene {
     this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), active);
   }
 
+  /** Map device pitch/roll (degrees) into the tiny planet sway targets. */
+  private applyTiltDegrees(beta: number, gamma: number): void {
+    if (this.reduce || this.dead) return;
+    if (this.tiltBaseBeta == null) {
+      this.tiltBaseBeta = beta;
+      this.tiltBaseGamma = gamma;
+    }
+    const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -28, 28);
+    const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -28, 28);
+    // ~±5° max sway — readable iPhone-camera parallax, not a flight sim
+    const sens = 0.0036;
+    this.tiltTargetX = THREE.MathUtils.clamp(-dBeta * sens, -0.09, 0.09);
+    this.tiltTargetY = THREE.MathUtils.clamp(dGamma * sens, -0.09, 0.09);
+    this.tiltActive = true;
+  }
+
+  private detachOrientationListeners(): void {
+    window.removeEventListener("deviceorientation", this.onDeviceOrientation, true);
+    window.removeEventListener("deviceorientationabsolute", this.onDeviceOrientation, true);
+    try {
+      this.relativeOrientationSensor?.stop();
+    } catch {
+      /* ignore */
+    }
+    this.relativeOrientationSensor = null;
+  }
+
+  private attachOrientationListeners(): void {
+    // Classic events: Android Chrome often prefers absolute; iOS uses relative.
+    window.addEventListener("deviceorientation", this.onDeviceOrientation, true);
+    window.addEventListener("deviceorientationabsolute", this.onDeviceOrientation, true);
+    this.startRelativeOrientationSensor();
+  }
+
+  /**
+   * Android Chrome (and some tablets) expose RelativeOrientationSensor when
+   * Permissions-Policy allows accelerometer/gyroscope. Optional fallback.
+   */
+  private startRelativeOrientationSensor(): void {
+    if (this.relativeOrientationSensor) return;
+    type ROS = new (opts?: { frequency?: number; referenceFrame?: string }) => {
+      start: () => void;
+      stop: () => void;
+      quaternion: [number, number, number, number];
+      addEventListener: (type: string, fn: () => void) => void;
+    };
+    const Ctor = (window as unknown as { RelativeOrientationSensor?: ROS }).RelativeOrientationSensor;
+    if (!Ctor) return;
+    try {
+      const sensor = new Ctor({ frequency: 30, referenceFrame: "screen" });
+      sensor.addEventListener("reading", () => {
+        const [x, y, z, w] = sensor.quaternion;
+        // Quaternion → pitch (beta-like) / roll (gamma-like) in degrees.
+        const sinr = 2 * (w * x + y * z);
+        const cosr = 1 - 2 * (x * x + y * y);
+        const gamma = (Math.atan2(sinr, cosr) * 180) / Math.PI;
+        const sinp = 2 * (w * y - z * x);
+        const beta = (Math.asin(Math.max(-1, Math.min(1, sinp))) * 180) / Math.PI;
+        this.applyTiltDegrees(beta, gamma);
+      });
+      sensor.addEventListener("error", () => {
+        try {
+          sensor.stop();
+        } catch {
+          /* ignore */
+        }
+        this.relativeOrientationSensor = null;
+      });
+      sensor.start();
+      this.relativeOrientationSensor = sensor;
+    } catch {
+      // Not allowed / insecure context — deviceorientation listeners remain.
+    }
+  }
+
   /**
    * Enable subtle device-tilt parallax (iPhone camera / wallpaper style) on
    * iPhone, iPad, and Android tablets. No-ops on desktop without sensors.
    * iOS Safari requires DeviceOrientationEvent.requestPermission() after a gesture.
+   * Android uses deviceorientation / deviceorientationabsolute (no prompt) plus
+   * RelativeOrientationSensor when available.
    */
   private async enableTiltParallax(): Promise<void> {
     if (this.tiltTried || this.reduce || this.dead) return;
-    if (typeof window === "undefined" || typeof DeviceOrientationEvent === "undefined") return;
+    if (typeof window === "undefined") return;
 
     // Desktop mouse-only → skip sensors (RMB micro-tilt still works).
     // iPad + Magic Keyboard often reports pointer:fine / hover — still enable when touch exists.
@@ -866,24 +932,28 @@ export class JupiterScene {
     const hoverNone = window.matchMedia("(hover: none)").matches;
     if (!hasTouch && !coarse && !hoverNone) return;
 
-    // Mark tried only once we actually attempt permission / listeners (so a dismissed
-    // prompt can be retried on a later tap).
+    const hasDOE = typeof DeviceOrientationEvent !== "undefined";
+    const hasROS = typeof (window as unknown as { RelativeOrientationSensor?: unknown }).RelativeOrientationSensor !== "undefined";
+    if (!hasDOE && !hasROS) return;
+
     this.tiltTried = true;
 
-    type DOE = typeof DeviceOrientationEvent & {
-      requestPermission?: () => Promise<"granted" | "denied" | "default">;
-    };
-    const DOE = DeviceOrientationEvent as DOE;
     try {
-      // Must run in the user-gesture turn on iOS Safari (13+).
-      if (typeof DOE.requestPermission === "function") {
-        const state = await DOE.requestPermission();
-        if (state !== "granted") {
-          this.tiltTried = false; // allow another tap to re-prompt
-          return;
+      // iOS Safari 13+: must prompt in the user-gesture turn. Android has no such API.
+      if (hasDOE) {
+        type DOE = typeof DeviceOrientationEvent & {
+          requestPermission?: () => Promise<"granted" | "denied" | "default">;
+        };
+        const DOE = DeviceOrientationEvent as DOE;
+        if (typeof DOE.requestPermission === "function") {
+          const state = await DOE.requestPermission();
+          if (state !== "granted") {
+            this.tiltTried = false;
+            return;
+          }
         }
       }
-      window.addEventListener("deviceorientation", this.onDeviceOrientation, true);
+      this.attachOrientationListeners();
     } catch {
       this.tiltTried = false;
       // Permission denied or unsupported — keep drag orbit; no crash.
@@ -898,7 +968,7 @@ export class JupiterScene {
       this.tiltActive = false;
       this.tiltTargetX = 0;
       this.tiltTargetY = 0;
-      window.removeEventListener("deviceorientation", this.onDeviceOrientation);
+      this.detachOrientationListeners();
     }
   }
 
@@ -915,7 +985,7 @@ export class JupiterScene {
     this.canvas.removeEventListener("pointerdown", this.onTiltGesture);
     this.canvas.removeEventListener("touchstart", this.onTiltGesture);
     this.canvas.removeEventListener("click", this.onTiltGesture);
-    window.removeEventListener("deviceorientation", this.onDeviceOrientation);
+    this.detachOrientationListeners();
     this.controls.removeEventListener("change", this.onActivity);
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.visObs?.disconnect();
