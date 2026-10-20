@@ -299,6 +299,8 @@ export class JupiterScene {
   private readonly camOrbitBase = new THREE.Vector3();
   private readonly camOrbitOff = new THREE.Vector3();
   private readonly camOrbitAxis = new THREE.Vector3();
+  /** Base FOV from applyFrame; tilt may breathe a fraction of a degree on top. */
+  private baseFov = 36;
   /** Star depth layers and their parallax gain on the planet tilt/sway. */
   private starLayers: { group: THREE.Group; k: number }[] = [];
   /** Deferred 8K cloud upgrade (armed after 4K lands on sharp desktop). */
@@ -791,7 +793,8 @@ export class JupiterScene {
     const h = this.canvas.clientHeight;
     if (w < 2 || h < 2) return;
     const { mode, top, right, bottom } = this.frameSpec;
-    this.camera.fov = mode === "phone" ? 42 : 36;
+    this.baseFov = mode === "phone" ? 42 : 36;
+    this.camera.fov = this.baseFov;
     this.camera.aspect = w / h;
     this.viewOffTarget.set(right / 2, (bottom - top) / 2);
     // Snap during startup; afterwards the offset glides in frame() so the planet recenters smoothly.
@@ -1625,13 +1628,13 @@ export class JupiterScene {
       skyMat.needsUpdate = true;
     });
     const [faint, bright] = this.quality.stars;
-    // Three depth layers; frame() turns each by a different fraction of the existing tilt/sway
-    // so the planet reads as floating in front (far barely moves, near moves most).
+    // Depth layers: near pulled in / far pushed out so camera-orbit + mild layer turn read as
+    // clear spatial separation mid-drag (iPhone wallpaper depth), without spinning Jupiter.
     this.starLayers = [
-      { group: sky, k: 0.15 },
-      { group: make(Math.round(faint * 0.85), 0.26, 95, 40, 0.7), k: 0.3 },
-      { group: make(Math.round(faint * 0.7), 0.2, 55, 30, 0.85), k: 0.65 },
-      { group: make(bright, 0.3, 34, 14, 0.95), k: 1.3 },
+      { group: sky, k: 0.1 },
+      { group: make(Math.round(faint * 0.85), 0.26, 110, 45, 0.7), k: 0.22 },
+      { group: make(Math.round(faint * 0.7), 0.22, 48, 28, 0.85), k: 0.55 },
+      { group: make(bright, 0.32, 22, 14, 0.95), k: 1.05 },
     ];
   }
 
@@ -1999,7 +2002,12 @@ export class JupiterScene {
     }
     this.planetGroup.rotation.y = this.planetSwayY;
     this.planetGroup.rotation.x = this.planetSwayX;
-    // Star layers stay fixed in world space: the camera orbit itself produces true depth parallax.
+    // Mild depth parallax on star layers (on top of camera micro-orbit) — far barely turns,
+    // near turns most — so mid-drag background shift reads as spatial depth, not planet spin.
+    for (const layer of this.starLayers) {
+      layer.group.rotation.y = this.swayY * layer.k;
+      layer.group.rotation.x = this.swayX * layer.k;
+    }
 
     if (this.viewOff.distanceToSquared(this.viewOffTarget) > 0.04) {
       this.viewOff.lerp(this.viewOffTarget, 1 - Math.exp(-7 * dt));
@@ -2038,7 +2046,7 @@ export class JupiterScene {
       this.camOrbitX += ((on ? this.tiltTargetX : 0) - this.camOrbitX) * k;
       this.camOrbitY += ((on ? this.tiltTargetY : 0) - this.camOrbitY) * k;
       if (Math.abs(this.camOrbitX) > 1e-5 || Math.abs(this.camOrbitY) > 1e-5) {
-        const gain = 1; // full clamp (0.09 rad) ≈ 5° — matches prior planet-sway envelope (readable on iPhone)
+        const gain = 1.4; // full clamp (0.09 rad) ≈ 7.2° — stronger spatial pop, still not a flight sim
         this.camOrbitBase.copy(this.camera.position);
         const off = this.camOrbitOff.copy(this.camera.position).sub(this.controls.target);
         const right = this.camOrbitAxis.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
@@ -2048,6 +2056,13 @@ export class JupiterScene {
         this.camera.lookAt(this.controls.target);
         this.camera.updateMatrixWorld(); // so Earth label / picking project with the orbited view
         this.camOrbitOn = true;
+      }
+      // Tiny FOV breathe with tilt magnitude (~0.4° at full tilt) — depth pop without dolly fight.
+      const tiltMag = Math.hypot(this.camOrbitX, this.camOrbitY);
+      const fovTarget = this.baseFov + Math.min(0.45, tiltMag * 4.5);
+      if (Math.abs(this.camera.fov - fovTarget) > 0.01) {
+        this.camera.fov = fovTarget;
+        this.camera.updateProjectionMatrix();
       }
     }
 
