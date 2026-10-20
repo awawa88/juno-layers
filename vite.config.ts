@@ -30,6 +30,22 @@ function hasGlobbedMigrations(root: string): boolean {
  * migrations — no schema to apply — skips it entirely rather than paying for a
  * PGLite instance it never queries.
  */
+
+/** Dev Permissions-Policy matching vercel.json (sensors for gyro / RelativeOrientationSensor). */
+function permissionsPolicyPlugin(): Plugin {
+  const value = "accelerometer=(self), gyroscope=(self), magnetometer=(self)";
+  return {
+    name: "juno-permissions-policy",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        res.setHeader("Permissions-Policy", value);
+        next();
+      });
+    },
+  };
+}
+
 function pgliteBootstrapPlugin(): Plugin {
   return {
     name: "app-builder:pglite-bootstrap",
@@ -158,6 +174,7 @@ export default defineConfig(({ command, isPreview }) => ({
   },
   resolve: { tsconfigPaths: true },
   plugins: [
+    permissionsPolicyPlugin(),
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),

@@ -301,6 +301,9 @@ export class JupiterScene {
   private readonly camOrbitAxis = new THREE.Vector3();
   /** Star depth layers and their parallax gain on the planet tilt/sway. */
   private starLayers: { group: THREE.Group; k: number }[] = [];
+  /** Deferred 8K cloud upgrade (armed after 4K lands on sharp desktop). */
+  private cloud8kArmed = false;
+  private cloud8kUniform: THREE.IUniform<THREE.Texture> | null = null;
   /** Device-tilt parallax targets (iPhone-camera / wallpaper style), radians. */
   private tiltTargetX = 0;
   private tiltTargetY = 0;
@@ -391,6 +394,8 @@ export class JupiterScene {
     // Runs before OrbitControls' own pointerdown (capture): pan only for mouse, so touch
     // two-finger stays dolly-only as before.
     canvas.addEventListener("pointerdown", this.onPanGate, { capture: true });
+    canvas.addEventListener("pointermove", this.clearCamOrbitForControls, { capture: true });
+    canvas.addEventListener("wheel", this.clearCamOrbitForControls, { capture: true, passive: true });
     this.controls.minDistance = 2.85;
     this.controls.maxDistance = 16;
     this.controls.minPolarAngle = 0.08;
@@ -433,18 +438,7 @@ export class JupiterScene {
         this.touring = false;
         this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), false);
       }
-      // Desktop RMB: tiny camera-style tilt (same amplitude as device parallax).
-      if (e.button === 2 && !this.reduce && this.tiltEnabled) {
-        this.rmbTilting = true;
-        this.rmbLastX = e.clientX;
-        this.rmbLastY = e.clientY;
-        this.tiltActive = true;
-        try {
-          this.canvas.setPointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
-        }
-      }
+      // RMB tilt starts in onPanGate (capture) so OrbitControls never tracks the pointer.
     };
     this.onPointerMove = (e) => {
       if (e.buttons > 0) this.lastInteractTime = this.timeU.value;
@@ -523,6 +517,8 @@ export class JupiterScene {
     this.tiltEnabled = JupiterScene.readTiltPref();
     this.syncRightButton();
     this.beginTiltParallax();
+    // Headless/probe hook (localhost reviews); never relied on by the app UI.
+    (canvas as unknown as { __junoScene?: JupiterScene }).__junoScene = this;
   }
 
   /** Run the render loop only while it can be seen. */
@@ -616,12 +612,21 @@ export class JupiterScene {
     return Math.min(window.devicePixelRatio || 1, pixelRatioCap(width, this.quality), this.pixelCeil);
   }
 
+  /** True when an 8K cloud map is worth the VRAM (sharp desktop + GPU headroom). */
+  private wantsCloud8k(): boolean {
+    if (this.quality.tier !== "high") return false;
+    if (isMobileViewport(this.canvas.clientWidth)) return false;
+    if ((window.devicePixelRatio || 1) < 1.75) return false;
+    return this.renderer.capabilities.maxTextureSize >= 8192;
+  }
+
   /** Swap a preview map for the full-resolution one once the worker has generated it. */
   private upgradeMap(uniform: THREE.IUniform<THREE.Texture>, kind: TextureKind): void {
     let [w, h] = kind === "cloud" ? this.quality.cloudTex : this.quality.earthTex;
-    // Desktop high tier gets 8K OPAL when the GPU allows it; mobile stays on 2K even if tier is high.
+    // Clouds: load the tier map first (4K on desktop high). Optionally step up to 8K after idle so
+    // first paint stays light and we never keep both 8K and 4K bound.
     if (kind === "cloud") {
-      const requested = isMobileViewport(this.canvas.clientWidth) ? 2048 : w >= 3072 ? 8192 : w;
+      const requested = isMobileViewport(this.canvas.clientWidth) ? 2048 : w;
       w = pickJupiterCloudMapWidth(requested, this.renderer.capabilities.maxTextureSize);
       h = w / 2;
     }
@@ -631,11 +636,42 @@ export class JupiterScene {
           tex.dispose();
           return;
         }
-        tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        tex.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
         const preview = uniform.value;
         uniform.value = tex;
         this.disposables.push(tex);
         preview.dispose();
+        if (kind === "cloud" && this.wantsCloud8k() && w < 8192) {
+          this.cloud8kUniform = uniform;
+          this.cloud8kArmed = true;
+        }
+      },
+      (err: unknown) => console.error(err),
+    );
+  }
+
+  /** After a calm stretch, swap 4K → 8K once (disposes 4K) on sharp desktop GPUs. */
+  private maybeUpgradeCloud8k(): void {
+    if (!this.cloud8kArmed || !this.cloud8kUniform || this.dead) return;
+    if (!this.isIdle() || performance.now() - this.lastActiveMs < 4500) return;
+    this.cloud8kArmed = false;
+    const uniform = this.cloud8kUniform;
+    this.cloud8kUniform = null;
+    const width = pickJupiterCloudMapWidth(8192, this.renderer.capabilities.maxTextureSize);
+    if (width < 8192) return;
+    loadPlanetTexture("cloud", width, width / 2).then(
+      (tex) => {
+        if (this.dead) {
+          tex.dispose();
+          return;
+        }
+        tex.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
+        const prev = uniform.value;
+        uniform.value = tex;
+        this.disposables.push(tex);
+        prev.dispose();
+        const idx = this.disposables.indexOf(prev);
+        if (idx >= 0) this.disposables.splice(idx, 1);
       },
       (err: unknown) => console.error(err),
     );
@@ -888,11 +924,13 @@ export class JupiterScene {
     this.tiltTargetX = THREE.MathUtils.clamp(-dBeta * sens, -0.09, 0.09);
     this.tiltTargetY = THREE.MathUtils.clamp(dGamma * sens, -0.09, 0.09);
     this.tiltActive = true;
+    // Keep the render loop awake while the device is tilting (idleFps would otherwise skip frames).
+    this.lastActiveMs = performance.now();
   }
 
   private detachOrientationListeners(): void {
-    window.removeEventListener("deviceorientation", this.onDeviceOrientation, true);
-    window.removeEventListener("deviceorientationabsolute", this.onDeviceOrientation, true);
+    window.removeEventListener("deviceorientation", this.onDeviceOrientation);
+    window.removeEventListener("deviceorientationabsolute", this.onDeviceOrientation);
     try {
       this.relativeOrientationSensor?.stop();
     } catch {
@@ -902,9 +940,10 @@ export class JupiterScene {
   }
 
   private attachOrientationListeners(): void {
-    // Classic events: Android Chrome often prefers absolute; iOS uses relative.
-    window.addEventListener("deviceorientation", this.onDeviceOrientation, true);
-    window.addEventListener("deviceorientationabsolute", this.onDeviceOrientation, true);
+    // Classic events: iOS Safari only has DeviceOrientationEvent (no Generic Sensor API).
+    // Use bubble phase (Safari's documented path). Android may also fire absolute.
+    window.addEventListener("deviceorientation", this.onDeviceOrientation);
+    window.addEventListener("deviceorientationabsolute", this.onDeviceOrientation);
     this.startRelativeOrientationSensor();
   }
 
@@ -1067,7 +1106,51 @@ export class JupiterScene {
   }
 
   private readonly onPanGate = (e: PointerEvent) => {
+    this.clearCamOrbitForControls();
     this.controls.enablePan = !this.tiltEnabled && e.pointerType === "mouse";
+    // When 3D owns RMB, steal the event from OrbitControls (stopImmediatePropagation also
+    // skips our bubble pointerdown, so start the tilt here).
+    if (e.button === 2 && this.tiltEnabled && !this.reduce && !this.dead) {
+      this.downX = e.clientX;
+      this.downY = e.clientY;
+      this.downT = performance.now();
+      this.markMoved();
+      this.lastInteractTime = this.timeU.value;
+      if (this.touring) {
+        this.touring = false;
+        this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), false);
+      }
+      this.rmbTilting = true;
+      this.rmbLastX = e.clientX;
+      this.rmbLastY = e.clientY;
+      this.tiltActive = true;
+      try {
+        this.canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      e.stopImmediatePropagation();
+    }
+  };
+
+  /**
+   * Camera micro-orbit is applied after controls.update() each frame. Wheel / pinch / drag call
+   * OrbitControls.update() in between frames while the camera still has the orbit offset applied;
+   * the next frame then restored a stale pre-zoom base and wiped the dolly. Peel the orbit off
+   * before any controls input so zoom/orbit/pan always see the real camera.
+   *
+   * Idle pointermove (hover / resting finger with buttons===0) must NOT peel — that raced the
+   * rAF gyro/RMB micro-orbit apply and made device-orientation tilt look dead on phones.
+   */
+  private clearCamOrbitForControls = (e?: Event): void => {
+    if (!this.camOrbitOn) return;
+    if (e && e.type === "pointermove") {
+      const pe = e as PointerEvent;
+      // Only peel when OrbitControls would actually dolly/rotate/pan from this move.
+      if (pe.buttons === 0 && !this.rmbTilting) return;
+    }
+    this.camera.position.copy(this.camOrbitBase);
+    this.camOrbitOn = false;
   };
 
   setTiltEnabled(on: boolean): void {
@@ -1113,6 +1196,13 @@ export class JupiterScene {
     window.clearTimeout(this.lostTimer);
     this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
     this.canvas.removeEventListener("pointerdown", this.onPanGate, true);
+    this.canvas.removeEventListener("pointermove", this.clearCamOrbitForControls, true);
+    this.canvas.removeEventListener("wheel", this.clearCamOrbitForControls, true);
+    try {
+      delete (this.canvas as unknown as { __junoScene?: JupiterScene }).__junoScene;
+    } catch {
+      /* ignore */
+    }
     this.canvas.removeEventListener("webglcontextrestored", this.onContextRestored);
     for (const type of ["pointerdown", "pointermove", "wheel", "touchstart"] as const) {
       this.canvas.removeEventListener(type, this.onActivity);
@@ -1520,7 +1610,8 @@ export class JupiterScene {
     skyMesh.renderOrder = -10;
     sky.add(skyMesh);
     this.scene.add(sky);
-    const skyUrl = this.quality.tier === "high" ? "/textures/starmap-nasa.webp" : "/textures/starmap-nasa-mobile.webp";
+    const sharpDesktop = this.quality.tier === "high" && (window.devicePixelRatio || 1) >= 1.75;
+    const skyUrl = sharpDesktop ? "/textures/starmap-nasa.webp" : "/textures/starmap-nasa-mobile.webp";
     new THREE.TextureLoader().load(skyUrl, (tex) => {
       if (this.dead) {
         tex.dispose();
@@ -1538,9 +1629,9 @@ export class JupiterScene {
     // so the planet reads as floating in front (far barely moves, near moves most).
     this.starLayers = [
       { group: sky, k: 0.15 },
-      { group: make(faint, 0.26, 95, 40, 0.7), k: 0.3 },
-      { group: make(faint, 0.2, 55, 30, 0.85), k: 0.65 },
-      { group: make(bright * 2, 0.3, 34, 14, 0.95), k: 1.3 },
+      { group: make(Math.round(faint * 0.85), 0.26, 95, 40, 0.7), k: 0.3 },
+      { group: make(Math.round(faint * 0.7), 0.2, 55, 30, 0.85), k: 0.65 },
+      { group: make(bright, 0.3, 34, 14, 0.95), k: 1.3 },
     ];
   }
 
@@ -1838,6 +1929,7 @@ export class JupiterScene {
       this.camOrbitOn = false;
     }
     const dt = Math.min(this.timer.getDelta(), 0.05);
+    this.maybeUpgradeCloud8k();
     if (!this.reduce) this.timeU.value += dt;
     const tNow = this.timeU.value;
 
@@ -1946,7 +2038,7 @@ export class JupiterScene {
       this.camOrbitX += ((on ? this.tiltTargetX : 0) - this.camOrbitX) * k;
       this.camOrbitY += ((on ? this.tiltTargetY : 0) - this.camOrbitY) * k;
       if (Math.abs(this.camOrbitX) > 1e-5 || Math.abs(this.camOrbitY) > 1e-5) {
-        const gain = 0.55; // full clamp (0.09 rad) ≈ 2.8° of orbit
+        const gain = 1; // full clamp (0.09 rad) ≈ 5° — matches prior planet-sway envelope (readable on iPhone)
         this.camOrbitBase.copy(this.camera.position);
         const off = this.camOrbitOff.copy(this.camera.position).sub(this.controls.target);
         const right = this.camOrbitAxis.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
