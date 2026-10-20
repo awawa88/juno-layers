@@ -195,7 +195,15 @@ void main() {
   float duy = dFdy(u);
   dux -= floor(dux + 0.5);
   duy -= floor(duy + 0.5);
-  vec3 tex = textureGrad(uMap, vec2(u, v), vec2(dux, dFdx(v)), vec2(duy, dFdy(v))).rgb;
+  // Shrink textureGrad derivatives so mips pick a sharper level on the NASA OPAL map
+  // (belts/GRS read crisper; keep some mip AA to avoid shimmer/halos).
+  const float mipSharp = 0.50;
+  vec3 tex = textureGrad(
+    uMap,
+    vec2(u, v),
+    vec2(dux, dFdx(v)) * mipSharp,
+    vec2(duy, dFdy(v)) * mipSharp
+  ).rgb;
 
   // Very light filament modulation — preserve photo edge frequency
   vec3 albedo = tex * (1.0 + fineShear * 0.03);

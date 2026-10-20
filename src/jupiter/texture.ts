@@ -153,6 +153,9 @@ export function loadJupiterCloudMap(): Promise<THREE.Texture> {
           tex.colorSpace = THREE.SRGBColorSpace;
           tex.wrapS = THREE.RepeatWrapping;
           tex.wrapT = THREE.ClampToEdgeWrapping;
+          tex.generateMipmaps = true;
+          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.magFilter = THREE.LinearFilter;
           tex.anisotropy = 8;
           resolve(tex);
         },

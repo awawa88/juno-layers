@@ -20,6 +20,7 @@ Credit: NASA / Goddard Space Flight Center / SVS / ASU LROC. Public domain.
 
 `jupiter-opal.webp` — Hubble OPAL global Jupiter map (Rotation 1, 19 Jan 2015), resized to 2048×1024 WebP
 and rolled in longitude so the Great Red Spot aligns with the app's geometric GRS pick.
+Mild unsharp-mask (palette-preserving) baked in so belts/GRS stay crisp under mip sampling.
 
 Source: NASA Science asset (https://science.nasa.gov/asset/hubble/jupiter-global-map-from-hubble-opal-data-rotation-1/),
 derived from HST WFC3/UVIS OPAL proposal 13937. Direct download used:
