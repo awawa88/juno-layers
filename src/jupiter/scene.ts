@@ -275,6 +275,8 @@ export class JupiterScene {
   private lastInteractTime = -10;
   private touring = false;
   private tourPhase = 0;
+  private tourSentFocus = -1;
+  private tourSentLayer = -1;
   private frameSpec: FrameSpec = { mode: "wide", top: 0, right: 0, bottom: 0 };
   private homeDist = 0;
   private swayX = 0;
@@ -750,6 +752,10 @@ export class JupiterScene {
     this.earth.position.copy(this.earthBase);
   }
 
+  get isTouring(): boolean {
+    return this.touring;
+  }
+
   setTouring(active: boolean): void {
     if (this.touring === active) return;
     this.touring = active;
@@ -758,7 +764,10 @@ export class JupiterScene {
       this.introT = 1;
       this.setViewMoved(true);
       // Start tour phase smoothly matching current focus depth
-      this.tourPhase = (this.focus / 4) * Math.PI;
+      // Skip the flat ends of the wave so depth starts changing at once (not after ~2 s)
+      this.tourPhase = THREE.MathUtils.clamp((this.focus / 4) * Math.PI, 0.6, Math.PI - 0.6);
+      this.tourSentFocus = this.focus;
+      this.tourSentLayer = Math.min(4, Math.round(this.focus));
     }
     this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), active);
   }
@@ -1487,7 +1496,14 @@ export class JupiterScene {
       const rawWave = 0.5 - 0.5 * Math.cos(this.tourPhase);
       const nextFocus = THREE.MathUtils.clamp(smoothstep(0.04, 0.96, rawWave) * 4, 0, 4);
       this.focus = nextFocus;
-      this.hooks.onTourProgress?.(nextFocus, Math.min(4, Math.round(nextFocus)), true);
+      // Throttle React updates: only on a layer change, a 0.02 depth step, or reaching either end.
+      const nextLayer = Math.min(4, Math.round(nextFocus));
+      const atEnd = (nextFocus === 0 || nextFocus === 4) && nextFocus !== this.tourSentFocus;
+      if (atEnd || nextLayer !== this.tourSentLayer || Math.abs(nextFocus - this.tourSentFocus) >= 0.02) {
+        this.tourSentFocus = nextFocus;
+        this.tourSentLayer = nextLayer;
+        this.hooks.onTourProgress?.(nextFocus, nextLayer, true);
+      }
 
       // Swing away from the classic view and back: both offsets are zero whenever the tour is at the surface
       const azim = HOME_AZ + Math.sin(this.tourPhase * 0.5) * 0.42;

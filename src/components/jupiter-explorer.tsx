@@ -24,7 +24,6 @@ export function JupiterExplorer() {
   const tipRef = useRef<HTMLDivElement>(null);
   const earthRef = useRef<HTMLDivElement>(null);
   const focusRef = useRef(0);
-  const tourUpdateRef = useRef(false);
   const cardRef = useRef<CardState>("default");
   const layoutRef = useRef<FrameSpec["mode"] | null>(null);
   const cardHeightRef = useRef(0);
@@ -61,10 +60,8 @@ export function JupiterExplorer() {
 
   useEffect(() => {
     focusRef.current = focus;
-    if (tourUpdateRef.current) {
-      tourUpdateRef.current = false;
-      return;
-    }
+    // The tour drives the scene itself; echoing its depth back would read as user input and stop it.
+    if (sceneRef.current?.isTouring) return;
     sceneRef.current?.setFocus(focus);
   }, [focus]);
 
@@ -180,7 +177,6 @@ export function JupiterExplorer() {
             el.style.top = `${y}px`;
           },
           onTourProgress: (nextFocus, nextSelected, active) => {
-            tourUpdateRef.current = true;
             focusRef.current = nextFocus;
             setFocus(nextFocus);
             setSelected(nextSelected);
@@ -209,6 +205,7 @@ export function JupiterExplorer() {
       if (event.defaultPrevented || tag === "INPUT" || tag === "TEXTAREA") return;
       if (event.key === "ArrowRight" || event.key === "ArrowDown") {
         event.preventDefault();
+        sceneRef.current?.setTouring(false);
         setFocus((current) => {
           const next = Math.min(4, Math.floor(current + 0.001) + 1);
           setSelected(next);
@@ -216,6 +213,7 @@ export function JupiterExplorer() {
         });
       } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
         event.preventDefault();
+        sceneRef.current?.setTouring(false);
         setFocus((current) => {
           const next = Math.max(0, Math.ceil(current - 0.001) - 1);
           setSelected(next);
@@ -223,6 +221,7 @@ export function JupiterExplorer() {
         });
       } else if (event.key >= "1" && event.key <= "5") {
         const next = Number(event.key) - 1;
+        sceneRef.current?.setTouring(false);
         setFocus(next);
         setSelected(next);
       }
@@ -461,6 +460,7 @@ export function JupiterExplorer() {
               aria-label={copy.depth}
               onChange={(event) => {
                 const value = Number(event.target.value);
+                sceneRef.current?.setTouring(false);
                 setFocus(value);
                 setSelected(Math.min(4, Math.max(0, Math.round(value))));
               }}
