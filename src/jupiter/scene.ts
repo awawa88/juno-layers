@@ -4,6 +4,7 @@ import { LAYERS, SPOTS, spotAt, type LayerId } from "@/jupiter/layers";
 import {
   CLOUD_FRAG,
   EARTH_FRAG,
+  MOON_FRAG,
   FUZZY_FRAG,
   GAS_FRAG,
   GLOW_FRAG,
@@ -13,7 +14,7 @@ import {
   VERT,
 } from "@/jupiter/shaders";
 import { qualityProfile, type QualityProfile } from "@/jupiter/quality";
-import { createPlanetTexture, createSpriteTexture, loadPlanetTexture, type TextureKind } from "@/jupiter/texture";
+import { createPlanetTexture, createSpriteTexture, loadMoonAlbedo, loadPlanetTexture, type TextureKind } from "@/jupiter/texture";
 
 export type PickInfo = {
   layer: number;
@@ -1363,44 +1364,33 @@ export class JupiterScene {
     this.moonPivot = moonPivot;
     moonPivot.rotation.x = 0.14;
     moonPivot.rotation.z = -0.18;
-    const moonMat = this.makeMat(
-      /* glsl */ `
-      varying vec3 vObj;
-      varying vec3 vWorld;
-      varying vec3 vNrm;
-      uniform vec3 uSun;
-      float hash13(vec3 p) {
-        p = fract(p * 0.1031);
-        p += dot(p, p.zyx + 33.33);
-        return fract((p.x + p.y) * p.z);
-      }
-      float noise(vec3 p) {
-        vec3 i = floor(p);
-        vec3 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(
-          mix(mix(hash13(i), hash13(i + vec3(1,0,0)), f.x), mix(hash13(i + vec3(0,1,0)), hash13(i + vec3(1,1,0)), f.x), f.y),
-          mix(mix(hash13(i + vec3(0,0,1)), hash13(i + vec3(1,0,1)), f.x), mix(hash13(i + vec3(0,1,1)), hash13(i + vec3(1,1,1)), f.x), f.y),
-          f.z
-        );
-      }
-      void main() {
-        vec3 d = normalize(vObj);
-        float maria = smoothstep(0.38, 0.68, noise(d * 2.8) * 0.65 + noise(d * 6.5) * 0.35);
-        vec3 albedo = mix(vec3(0.38, 0.37, 0.36), vec3(0.68, 0.66, 0.63), maria);
-        vec3 n = normalize(vNrm);
-        float ndl = clamp(dot(n, normalize(uSun)) * 0.8 + 0.2, 0.0, 1.0);
-        vec3 col = albedo * (0.04 + 1.05 * pow(ndl, 0.85));
-        gl_FragColor = vec4(col, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-      `,
+    // Tiny grey placeholder until the NASA LROC albedo arrives (Moon stays tiny on screen).
+    const moonPreview = new THREE.DataTexture(new Uint8Array([160, 158, 155, 255]), 1, 1);
+    moonPreview.colorSpace = THREE.SRGBColorSpace;
+    moonPreview.needsUpdate = true;
+    this.disposables.push(moonPreview);
+    const moonMap: THREE.IUniform<THREE.Texture> = { value: moonPreview };
+    loadMoonAlbedo().then(
+      (tex) => {
+        if (this.dead) {
+          tex.dispose();
+          return;
+        }
+        tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        const preview = moonMap.value;
+        moonMap.value = tex;
+        this.disposables.push(tex);
+        preview.dispose();
+      },
+      (err: unknown) => console.error(err),
     );
+    const moonMat = this.makeMat(MOON_FRAG, { uMap: moonMap });
     const moonMesh = new THREE.Mesh(
       this.track(new THREE.SphereGeometry(earthR * 0.273, ...this.quality.segs.moon)),
       moonMat,
     );
+    // Near side (map center) faces Earth — approximate tidal lock so maria read from the classic view.
+    moonMesh.rotation.y = Math.PI;
     moonMesh.position.set(earthR * 2.55, 0, 0);
     moonPivot.add(moonMesh);
 

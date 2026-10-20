@@ -108,9 +108,40 @@ export function loadEarthBlueMarble(): Promise<THREE.Texture> {
   return earthMapPromise;
 }
 
+
+/** NASA LROC WAC lunar color (CGI Moon Kit), equirectangular albedo. */
+const MOON_MAP_URL = "/textures/moon-lroc.webp";
+
+let moonMapPromise: Promise<THREE.Texture> | null = null;
+
+/** Load the shared Moon albedo once; ignores w/h (single lightweight asset). */
+export function loadMoonAlbedo(): Promise<THREE.Texture> {
+  if (!moonMapPromise) {
+    moonMapPromise = new Promise<THREE.Texture>((resolve, reject) => {
+      new THREE.TextureLoader().load(
+        MOON_MAP_URL,
+        (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
+          tex.anisotropy = 8;
+          resolve(tex);
+        },
+        undefined,
+        (err) => {
+          moonMapPromise = null;
+          reject(err);
+        },
+      );
+    });
+  }
+  return moonMapPromise;
+}
+
 /**
  * Full-resolution map: Jupiter clouds stay procedural (worker/chunked);
  * Earth uses the NASA Blue Marble asset (preview stays procedural via createPlanetTexture).
+ * Moon albedo is loaded separately via loadMoonAlbedo().
  */
 export function loadPlanetTexture(kind: TextureKind, w: number, h: number): Promise<THREE.Texture> {
   if (kind === "earth") return loadEarthBlueMarble();

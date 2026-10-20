@@ -750,6 +750,31 @@ void main() {
 }
 `;
 
+
+export const MOON_FRAG = /* glsl */ `
+${PRELUDE}
+uniform sampler2D uMap;
+void main() {
+  vec3 dir = normalize(vObj);
+  float lat = asin(clamp(dir.y, -1.0, 1.0));
+  float lon = atan(dir.z, dir.x);
+  float u = lon / 6.28318530718 + 0.5;
+  float v = clamp(lat / 3.14159265359 + 0.5, 0.002, 0.998);
+
+  // Wrap-safe gradients (same seam fix as Earth)
+  float dux = dFdx(u);
+  float duy = dFdy(u);
+  dux -= floor(dux + 0.5);
+  duy -= floor(duy + 0.5);
+  vec3 albedo = textureGrad(uMap, vec2(u, v), vec2(dux, dFdx(v)), vec2(duy, dFdy(v))).rgb;
+
+  vec3 n = normalize(vNrm);
+  float ndl = clamp(dot(n, normalize(uSun)) * 0.8 + 0.2, 0.0, 1.0);
+  vec3 col = albedo * (0.04 + 1.05 * pow(ndl, 0.85));
+  finish(col, 1.0);
+}
+`;
+
 export const GLOW_FRAG = /* glsl */ `
 varying vec3 vWorld;
 varying vec3 vNrm;

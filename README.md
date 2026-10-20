@@ -18,3 +18,5 @@ Then open the app on port 8080.
 The planet is a stylized Three.js model, not a photograph and not a numerical interior model. Sizes of the inner shells are exaggerated so each layer stays visible.
 
 Earth’s mini-globe albedo is NASA Blue Marble (Visible Earth 57752), with a baked land/ocean alpha mask. Credit: NASA Earth Observatory / NASA Goddard Space Flight Center (public domain).
+
+The Moon beside it uses a lightweight NASA LROC WAC color map (CGI Moon Kit / SVS 4720). Credit: NASA / GSFC / SVS / ASU LROC (public domain).
