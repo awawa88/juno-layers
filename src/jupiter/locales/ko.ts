@@ -46,6 +46,10 @@ export const ko: Locale = {
     revealsLabel: "탐구할 수 있는 층",
     timelineTitle: "임무 연표",
     exploreLayers: "각 층 살펴보기",
+    rotateToPortrait: "세로로 돌려 주세요",
+    rotateToPortraitHint: "스마트폰은 세로 화면이 가장 알맞습니다.",
+    rotateToLandscape: "가로로 돌려 주세요",
+    rotateToLandscapeHint: "태블릿은 가로 화면이 가장 알맞습니다.",
   },
   layers: {
     clouds: {

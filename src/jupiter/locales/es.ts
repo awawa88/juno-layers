@@ -46,6 +46,10 @@ export const es: Locale = {
     revealsLabel: "Capas que permite estudiar",
     timelineTitle: "Cronología de la misión",
     exploreLayers: "Explorar las capas",
+    rotateToPortrait: "Gira el teléfono a vertical",
+    rotateToPortraitHint: "Esta vista funciona mejor en vertical.",
+    rotateToLandscape: "Gira la tableta a horizontal",
+    rotateToLandscapeHint: "Esta vista funciona mejor en horizontal.",
   },
   layers: {
     clouds: {

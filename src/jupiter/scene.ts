@@ -319,6 +319,8 @@ export class JupiterScene {
   private lastTiltDeltaBeta = 0;
   private lastTiltDeltaGamma = 0;
   private tiltHaveDelta = false;
+  /** Last screen.orientation.angle used for DOE→screen remap; reset base on change. */
+  private tiltScreenAngle: number | null = null;
   private relativeOrientationSensor: { start: () => void; stop: () => void } | null = null;
   private readonly onDeviceOrientation: (e: DeviceOrientationEvent) => void;
   private readonly onTiltGesture: () => void;
@@ -492,7 +494,19 @@ export class JupiterScene {
     this.onDeviceOrientation = (e: DeviceOrientationEvent) => {
       // Android often sends a few null frames before beta/gamma populate.
       if (e.beta == null || e.gamma == null) return;
-      this.applyTiltDegrees(e.beta, e.gamma);
+      // DOE beta/gamma are device-fixed (portrait-primary). Remap to screen axes so
+      // landscape iPad/tablet tipping matches the portrait-phone wallpaper convention.
+      const angle = JupiterScene.screenAngle();
+      if (this.tiltScreenAngle != null && this.tiltScreenAngle !== angle) {
+        this.tiltBaseBeta = null;
+        this.tiltBaseGamma = null;
+        this.tiltHaveDelta = false;
+        this.lastTiltDeltaBeta = 0;
+        this.lastTiltDeltaGamma = 0;
+      }
+      this.tiltScreenAngle = angle;
+      const screen = JupiterScene.screenRelativeTilt(e.beta, e.gamma, angle);
+      this.applyTiltDegrees(screen.beta, screen.gamma);
     };
     this.onTiltGesture = () => {
       void this.enableTiltParallax();
@@ -941,15 +955,51 @@ export class JupiterScene {
     return s * (linearMax + room * Math.tanh((a - linearMax) / Math.max(room, 1e-6)));
   }
 
+  /** screen.orientation.angle, falling back to legacy window.orientation (degrees). */
+  private static screenAngle(): number {
+    const so = typeof screen !== "undefined" ? screen.orientation : undefined;
+    if (so && typeof so.angle === "number") return so.angle;
+    const wo = (window as Window & { orientation?: number }).orientation;
+    return typeof wo === "number" ? wo : 0;
+  }
+
   /**
-   * Map device pitch/roll (degrees) → camera orbit (radians), ~1:1 within ±30° then soft toward ±36°.
+   * Remap device-fixed DOE beta/gamma into screen-relative pitch/roll.
+   * Portrait (0°) is identity — phone gyro stays as calibrated. Landscape swaps/negates
+   * so tipping the top of the *display* toward you still reads as −screen-beta.
+   */
+  private static screenRelativeTilt(
+    beta: number,
+    gamma: number,
+    angle = JupiterScene.screenAngle(),
+  ): { beta: number; gamma: number } {
+    const a = ((angle % 360) + 360) % 360;
+    if (a >= 45 && a < 135) {
+      // landscape-primary (~90°)
+      return { beta: gamma, gamma: -beta };
+    }
+    if (a >= 225 && a < 315) {
+      // landscape-secondary (~270° / −90°)
+      return { beta: -gamma, gamma: beta };
+    }
+    if (a >= 135 && a < 225) {
+      // upside-down portrait (~180°)
+      return { beta: -beta, gamma: -gamma };
+    }
+    return { beta, gamma };
+  }
+
+  /**
+   * Map screen-relative pitch/roll (degrees) → camera orbit (radians), ~1:1 within ±30° then soft toward ±36°.
    * Baseline = first sample (held pose), so values are relative and don’t drift with gravity.
    *
-   * iPhone wallpaper / window convention (portrait, phone as a window onto Jupiter):
-   * - Tip top of phone toward you (beta↓) → look up → see more of Jupiter’s top (north)
+   * iPhone wallpaper / window convention (phone as a window onto Jupiter):
+   * - Tip top of screen toward you (beta↓) → look up → see more of Jupiter’s top (north)
    * - Tip left edge toward you (gamma↓) → look left → see more of Jupiter’s left
    *
-   * Over-tilt / Euler wraps: shortest-path Δ°, spike reject (>35° frame jump), soft saturate —
+   * Callers must pass screen-relative degrees (see screenRelativeTilt). Desktop RMB bypasses this.
+   *
+   * Over-tilt / Euler wraps: shortest-path Δ°, spike reject, soft saturate —
    * never hard-clamp to the opposite rail (that caused the bounce).
    */
   private applyTiltDegrees(beta: number, gamma: number): void {
@@ -1225,6 +1275,7 @@ export class JupiterScene {
       this.tiltHaveDelta = false;
       this.lastTiltDeltaBeta = 0;
       this.lastTiltDeltaGamma = 0;
+      this.tiltScreenAngle = null;
       this.rmbTilting = false;
       // Restore the first-load / intro-settled classic front (same home as a fresh page load),
       // not merely undo the last gyro/RMB micro-orbit — LMB rotate / pan / zoom can leave

@@ -46,6 +46,10 @@ export const ja: Locale = {
     revealsLabel: "探ることのできる層",
     timelineTitle: "任務の年表",
     exploreLayers: "各層を調べる",
+    rotateToPortrait: "縦向きに回転してください",
+    rotateToPortraitHint: "スマートフォンは縦向きが最適です。",
+    rotateToLandscape: "横向きに回転してください",
+    rotateToLandscapeHint: "タブレットは横向きが最適です。",
   },
   layers: {
     clouds: {

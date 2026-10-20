@@ -55,6 +55,10 @@ export type UiText = {
   revealsLabel: string;
   timelineTitle: string;
   exploreLayers: string;
+  rotateToPortrait: string;
+  rotateToPortraitHint: string;
+  rotateToLandscape: string;
+  rotateToLandscapeHint: string;
 };
 
 export type FaqItem = { q: string; a: string };

@@ -46,6 +46,10 @@ export const fr: Locale = {
     revealsLabel: "Couches qu’il permet d’étudier",
     timelineTitle: "Chronologie de la mission",
     exploreLayers: "Explorer les couches",
+    rotateToPortrait: "Tournez le téléphone en mode portrait",
+    rotateToPortraitHint: "Cette vue est conçue pour le mode portrait.",
+    rotateToLandscape: "Tournez la tablette en mode paysage",
+    rotateToLandscapeHint: "Cette vue est conçue pour le mode paysage.",
   },
   layers: {
     clouds: {

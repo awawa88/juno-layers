@@ -46,6 +46,10 @@ export const zhHans: Locale = {
     revealsLabel: "可探察的层区",
     timelineTitle: "任务时间线",
     exploreLayers: "探索各层",
+    rotateToPortrait: "请将手机转为竖屏",
+    rotateToPortraitHint: "此画面最适合竖屏浏览。",
+    rotateToLandscape: "请将平板转为横屏",
+    rotateToLandscapeHint: "此画面最适合横屏浏览。",
   },
   layers: {
     clouds: {

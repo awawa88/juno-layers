@@ -46,6 +46,10 @@ export const zhHant: Locale = {
     revealsLabel: "可探察的層區",
     timelineTitle: "任務時間線",
     exploreLayers: "探索各層",
+    rotateToPortrait: "請將手機轉為直向",
+    rotateToPortraitHint: "此畫面最適合直向瀏覽。",
+    rotateToLandscape: "請將平板轉為橫向",
+    rotateToLandscapeHint: "此畫面最適合橫向瀏覽。",
   },
   layers: {
     clouds: {
