@@ -12,7 +12,7 @@ export const fr: Locale = {
     restore: "Rétablir",
     autoTour: "Visite guidée",
     pauseTour: "Pause",
-    tilt: "Inclinaison 3D",
+    tilt: "3D",
     tiltOff: "Désactiver l’inclinaison",
     depth: "Profondeur de coupe",
     hideNotes: "Masquer les notes",
