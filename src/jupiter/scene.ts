@@ -496,7 +496,10 @@ export class JupiterScene {
       if (e.beta == null || e.gamma == null) return;
       // DOE beta/gamma are device-fixed (portrait-primary). Remap to screen axes so
       // landscape iPad/tablet tipping matches the portrait-phone wallpaper convention.
-      const angle = JupiterScene.screenAngle();
+      // Pass gamma so landscape fallback can pick 90 vs −90 when angle APIs lie/missing.
+      // Normalize to 0..359 so window.orientation −90 and screen angle 270 compare equal.
+      const angleRaw = JupiterScene.screenAngle(e.gamma);
+      const angle = ((angleRaw % 360) + 360) % 360;
       if (this.tiltScreenAngle != null && this.tiltScreenAngle !== angle) {
         this.tiltBaseBeta = null;
         this.tiltBaseGamma = null;
@@ -955,31 +958,54 @@ export class JupiterScene {
     return s * (linearMax + room * Math.tanh((a - linearMax) / Math.max(room, 1e-6)));
   }
 
-  /** screen.orientation.angle, falling back to legacy window.orientation (degrees). */
-  private static screenAngle(): number {
+  /**
+   * Clockwise screen rotation from device natural portrait (degrees).
+   *
+   * Prefer `window.orientation` over `screen.orientation.angle`: on iOS/iPadOS 16.4+
+   * Safari, screen.orientation.angle can disagree with window.orientation (and with
+   * Android) for the same physical landscape pose. Preferring screen.angle applied the
+   * wrong 90°↔270° remap and inverted BOTH gyro axes on iPad/tablet landscape.
+   * @see https://bugs.webkit.org/show_bug.cgi?id=254863
+   *
+   * `hintGamma` (device-fixed) disambiguates 90 vs −90 when APIs are missing/0 but the
+   * viewport is already landscape (device on its side ⇒ |gamma| ≫ |beta|).
+   */
+  private static screenAngle(hintGamma?: number | null): number {
+    const wo = (window as Window & { orientation?: number }).orientation;
+    if (typeof wo === "number") return wo;
+
     const so = typeof screen !== "undefined" ? screen.orientation : undefined;
     if (so && typeof so.angle === "number") return so.angle;
-    const wo = (window as Window & { orientation?: number }).orientation;
-    return typeof wo === "number" ? wo : 0;
+
+    const landscape =
+      (typeof window.matchMedia === "function" &&
+        window.matchMedia("(orientation: landscape)").matches) ||
+      window.innerWidth > window.innerHeight;
+    if (!landscape) return 0;
+    if (typeof hintGamma === "number" && Math.abs(hintGamma) > 45) {
+      return hintGamma >= 0 ? 90 : -90;
+    }
+    return 90;
   }
 
   /**
    * Remap device-fixed DOE beta/gamma into screen-relative pitch/roll.
    * Portrait (0°) is identity — phone gyro stays as calibrated. Landscape swaps/negates
-   * so tipping the top of the *display* toward you still reads as −screen-beta.
+   * so tipping the top of the *display* toward you still reads as −screen-beta, then the
+   * same applyTiltDegrees path as phone (tip-top → +orbitX, tip-left → −orbitY).
    */
   private static screenRelativeTilt(
     beta: number,
     gamma: number,
-    angle = JupiterScene.screenAngle(),
+    angle = JupiterScene.screenAngle(gamma),
   ): { beta: number; gamma: number } {
     const a = ((angle % 360) + 360) % 360;
     if (a >= 45 && a < 135) {
-      // landscape-primary (~90°)
+      // landscape-primary (~90°) — screen top = device right
       return { beta: gamma, gamma: -beta };
     }
     if (a >= 225 && a < 315) {
-      // landscape-secondary (~270° / −90°)
+      // landscape-secondary (~270° / −90°) — screen top = device left
       return { beta: -gamma, gamma: beta };
     }
     if (a >= 135 && a < 225) {
