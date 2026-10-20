@@ -243,9 +243,9 @@ void main() {
     float mu = clamp(dot(geomN, view), 0.0, 1.0);
     float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
 
-    // Soft cloud limb like OPAL photo: wide Minnaert falloff so the disc edge fades into black
-    // on the cloud layer itself (no thick gray outer shell).
-    float limbDark = pow(mu, 0.50) * mix(0.02, 1.0, smoothstep(0.0, 0.45, mu));
+    // Soft cloud limb like OPAL photo: gradual dimming (not a dark collar, not a gray halo).
+    // Keep cloud opaque — alpha fade was causing a hard bright pop at the silhouette.
+    float limbDark = pow(mu, 0.38) * mix(0.18, 1.0, smoothstep(0.0, 0.34, mu));
     float terminator = pow(mu0, 0.75);
 
     // Slight atmospheric Rayleigh/haze tint shift toward dusty warm-slate at low view angles
@@ -266,9 +266,7 @@ void main() {
       }
     }
 
-    // Slight opacity taper at grazing angles (glow is near-off, so no gray halo stacking).
-    float edgeSoft = smoothstep(0.0, 0.12, mu);
-    finish(col, uOpacity * edgeSoft);
+    finish(col, uOpacity);
   } else {
     // Interior cutaway wall when the cloud deck is peeled open:
     // Shows stratified atmospheric cross-section (ammonia ice -> NH4SH -> deep water clouds)

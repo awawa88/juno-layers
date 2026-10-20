@@ -478,10 +478,6 @@ export class JupiterScene {
     for (const type of ["pointerdown", "pointermove", "wheel", "touchstart"] as const) {
       canvas.addEventListener(type, this.onActivity, { passive: true });
     }
-    // First user gesture unlocks iOS DeviceOrientation permission (must be gesture-tied).
-    canvas.addEventListener("pointerdown", this.onTiltGesture, { passive: true });
-    canvas.addEventListener("touchstart", this.onTiltGesture, { passive: true });
-    canvas.addEventListener("click", this.onTiltGesture, { passive: true });
     this.controls.addEventListener("change", this.onActivity);
     document.addEventListener("visibilitychange", this.onVisibility);
     if (typeof IntersectionObserver !== "undefined") {
@@ -493,6 +489,9 @@ export class JupiterScene {
       });
       this.visObs.observe(canvas);
     }
+
+    // Tilt: Android/auto attach on load; iOS permission on first *page* gesture (not Jupiter-only).
+    this.beginTiltParallax();
   }
 
   /** Run the render loop only while it can be seen. */
@@ -913,46 +912,91 @@ export class JupiterScene {
     }
   }
 
-  /**
-   * Enable subtle device-tilt parallax (iPhone camera / wallpaper style) on
-   * iPhone, iPad, and Android tablets. No-ops on desktop without sensors.
-   * iOS Safari requires DeviceOrientationEvent.requestPermission() after a gesture.
-   * Android uses deviceorientation / deviceorientationabsolute (no prompt) plus
-   * RelativeOrientationSensor when available.
-   */
-  private async enableTiltParallax(): Promise<void> {
-    if (this.tiltTried || this.reduce || this.dead) return;
-    if (typeof window === "undefined") return;
+  /** True when this browser needs a gesture-tied DeviceOrientation permission prompt (iOS). */
+  private needsOrientationPermission(): boolean {
+    if (typeof DeviceOrientationEvent === "undefined") return false;
+    type DOE = typeof DeviceOrientationEvent & {
+      requestPermission?: () => Promise<"granted" | "denied" | "default">;
+    };
+    return typeof (DeviceOrientationEvent as DOE).requestPermission === "function";
+  }
 
-    // Desktop mouse-only → skip sensors (RMB micro-tilt still works).
-    // iPad + Magic Keyboard often reports pointer:fine / hover — still enable when touch exists.
+  private deviceLikelyHasTiltSensors(): boolean {
+    if (typeof window === "undefined") return false;
     const hasTouch =
       (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0) || "ontouchstart" in window;
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     const hoverNone = window.matchMedia("(hover: none)").matches;
-    if (!hasTouch && !coarse && !hoverNone) return;
+    // Desktop mouse-only → skip (RMB micro-tilt still works). Touch devices always qualify
+    // even if iPad+keyboard reports pointer:fine.
+    return hasTouch || coarse || hoverNone;
+  }
+
+  private armTiltPermissionGesture(): void {
+    // Any page interaction — not limited to tapping Jupiter.
+    for (const type of ["pointerdown", "touchstart", "click", "keydown"] as const) {
+      document.addEventListener(type, this.onTiltGesture, { passive: true, capture: true });
+    }
+  }
+
+  private disarmTiltPermissionGesture(): void {
+    for (const type of ["pointerdown", "touchstart", "click", "keydown"] as const) {
+      document.removeEventListener(type, this.onTiltGesture, true);
+    }
+  }
+
+  /**
+   * Start tilt as early as possible: Android attaches immediately; iOS arms a
+   * page-wide gesture listener for requestPermission (Safari requirement).
+   */
+  private beginTiltParallax(): void {
+    if (this.reduce || this.dead || !this.deviceLikelyHasTiltSensors()) return;
+    const hasDOE = typeof DeviceOrientationEvent !== "undefined";
+    const hasROS =
+      typeof (window as unknown as { RelativeOrientationSensor?: unknown }).RelativeOrientationSensor !==
+      "undefined";
+    if (!hasDOE && !hasROS) return;
+
+    if (this.needsOrientationPermission()) {
+      this.armTiltPermissionGesture();
+      return;
+    }
+    // Android / no-permission browsers: start listening without touching the globe.
+    void this.enableTiltParallax();
+  }
+
+  /**
+   * Enable subtle device-tilt parallax (iPhone camera / wallpaper style) on
+   * iPhone, iPad, and Android tablets. No-ops on desktop without sensors.
+   * iOS Safari requires DeviceOrientationEvent.requestPermission() after a gesture
+   * (any page interaction — not Jupiter-only). Android attaches with no prompt.
+   */
+  private async enableTiltParallax(): Promise<void> {
+    if (this.tiltTried || this.reduce || this.dead) return;
+    if (typeof window === "undefined") return;
+    if (!this.deviceLikelyHasTiltSensors()) return;
 
     const hasDOE = typeof DeviceOrientationEvent !== "undefined";
-    const hasROS = typeof (window as unknown as { RelativeOrientationSensor?: unknown }).RelativeOrientationSensor !== "undefined";
+    const hasROS =
+      typeof (window as unknown as { RelativeOrientationSensor?: unknown }).RelativeOrientationSensor !==
+      "undefined";
     if (!hasDOE && !hasROS) return;
 
     this.tiltTried = true;
 
     try {
-      // iOS Safari 13+: must prompt in the user-gesture turn. Android has no such API.
-      if (hasDOE) {
+      if (hasDOE && this.needsOrientationPermission()) {
         type DOE = typeof DeviceOrientationEvent & {
           requestPermission?: () => Promise<"granted" | "denied" | "default">;
         };
         const DOE = DeviceOrientationEvent as DOE;
-        if (typeof DOE.requestPermission === "function") {
-          const state = await DOE.requestPermission();
-          if (state !== "granted") {
-            this.tiltTried = false;
-            return;
-          }
+        const state = await DOE.requestPermission!();
+        if (state !== "granted") {
+          this.tiltTried = false;
+          return;
         }
       }
+      this.disarmTiltPermissionGesture();
       this.attachOrientationListeners();
     } catch {
       this.tiltTried = false;
@@ -982,9 +1026,7 @@ export class JupiterScene {
     for (const type of ["pointerdown", "pointermove", "wheel", "touchstart"] as const) {
       this.canvas.removeEventListener(type, this.onActivity);
     }
-    this.canvas.removeEventListener("pointerdown", this.onTiltGesture);
-    this.canvas.removeEventListener("touchstart", this.onTiltGesture);
-    this.canvas.removeEventListener("click", this.onTiltGesture);
+    this.disarmTiltPermissionGesture();
     this.detachOrientationListeners();
     this.controls.removeEventListener("change", this.onActivity);
     document.removeEventListener("visibilitychange", this.onVisibility);
@@ -1148,9 +1190,8 @@ export class JupiterScene {
     const cloudsMat = this.makeMat(
       CLOUD_FRAG,
       { uMap: cloudMap },
-      { side: THREE.FrontSide, relief: 1, transparent: true },
+      { side: THREE.FrontSide, relief: 1 },
     );
-    cloudsMat.depthWrite = true;
     const gasMat = this.makeMat(GAS_FRAG, {}, { side: THREE.FrontSide });
     const metalMat = this.makeMat(METAL_FRAG, {}, { side: THREE.FrontSide });
     const fuzzyMat = this.makeMat(FUZZY_FRAG, {}, { transparent: true, disp: 0.06 });
