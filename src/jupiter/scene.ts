@@ -1226,7 +1226,9 @@ export class JupiterScene {
       this.lastTiltDeltaBeta = 0;
       this.lastTiltDeltaGamma = 0;
       this.rmbTilting = false;
-      // Snap viewpoint home immediately — do not leave last gyro/RMB micro-orbit or sway stuck.
+      // Restore the first-load / intro-settled classic front (same home as a fresh page load),
+      // not merely undo the last gyro/RMB micro-orbit — LMB rotate / pan / zoom can leave
+      // OrbitControls away from HOME_AZ/HOME_EL.
       if (this.camOrbitOn) {
         this.camera.position.copy(this.camOrbitBase);
         this.camOrbitOn = false;
@@ -1247,6 +1249,17 @@ export class JupiterScene {
         this.camera.fov = this.baseFov;
         this.camera.updateProjectionMatrix();
       }
+      // Flush residual orbit/pan damping, then snap camera + target to init home defaults.
+      const damp = this.controls.enableDamping;
+      this.controls.enableDamping = false;
+      this.controls.update();
+      this.controls.enableDamping = damp;
+      this.controls.target.copy(this.homeTarget);
+      this.homeFor(this.focus, this.camera.position);
+      this.camera.lookAt(this.controls.target);
+      this.camZoomT = 1;
+      this.introT = 1;
+      this.setViewMoved(false);
     } else if (!this.reduce && !this.dead) {
       this.beginTiltParallax();
     }
