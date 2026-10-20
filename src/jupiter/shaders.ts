@@ -251,10 +251,10 @@ void main() {
     float limbDark = mix(0.95, 1.0, hazeEdge);
     float terminator = pow(mu0, 0.75);
     vec3 lit = albedo * (0.025 + 1.06 * terminator) * limbDark;
-    // Muted warm gray-brown like andrew-edge-ref-v2 (soft haze, not black collar).
-    vec3 haze = vec3(0.33, 0.30, 0.28);
+    // Muted warm gray-brown like andrew-edge-ref-v2 — nudged a bit darker (still not a black collar).
+    vec3 haze = vec3(0.26, 0.24, 0.22);
     vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
-    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.65);
+    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.70);
     vec3 col = mix(haze, mid, hazeEdge);
 
     // Occasional Juno-observed lightning flashes deep inside cyclonic belts (NEB ~ +12°, SEB ~ -14°)
@@ -696,8 +696,8 @@ void main() {
   float fres = pow(1.0 - ndv, 6.0) * smoothstep(0.0, 0.18, ndv);
   float sunlit = mix(0.55, 1.0, smoothstep(-0.40, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  vec3 col = vec3(0.55, 0.50, 0.45);
-  gl_FragColor = vec4(col, rim * 0.035);
+  vec3 col = vec3(0.42, 0.38, 0.34);
+  gl_FragColor = vec4(col, rim * 0.028);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
