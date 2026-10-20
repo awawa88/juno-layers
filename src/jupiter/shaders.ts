@@ -199,7 +199,9 @@ void main() {
   // (belts/GRS read crisper; keep some mip AA to avoid shimmer/halos).
   // High tier (desktop 4K) taps a slightly sharper mip; medium/low keep 0.50 for AA.
 #if QUALITY > 1
-  const float mipSharp = 0.42;
+  // Desktop 4K: very crisp mip pick (0.22 ≈ negative mip bias). Lower = sharper.
+  // Note: the old 0.72 value was softer (larger derivatives) — crispness goes the other way.
+  const float mipSharp = 0.22;
 #else
   const float mipSharp = 0.50;
 #endif

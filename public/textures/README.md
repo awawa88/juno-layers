@@ -20,7 +20,7 @@ Credit: NASA / Goddard Space Flight Center / SVS / ASU LROC. Public domain.
 
 `jupiter-opal.webp` — Hubble OPAL global Jupiter map (Rotation 1, 19 Jan 2015), baked to **4096×2048** WebP
 (desktop) from the 3600×1800 STScI RGB, rolled in longitude so the Great Red Spot aligns with the app's
-geometric GRS pick. Mild unsharp-mask (palette-preserving) after LANCZOS upsample so belts/GRS stay crisp
+geometric GRS pick. Strong two-pass unsharp-mask (~1.5/110% then ~2.2/170%, thr 2–3; palette-preserving) after LANCZOS upsample so belts/GRS stay very crisp
 under mip sampling.
 
 `jupiter-opal-mobile.webp` — same bake pipeline at **2048×1024** for mobile / lower tiers (bandwidth).

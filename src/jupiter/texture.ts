@@ -177,7 +177,15 @@ function loadJupiterCloudMapUrl(url: string): Promise<THREE.Texture> {
  * `preferHighRes` is false (mobile / lower tiers) to keep bandwidth down.
  */
 export function loadJupiterCloudMap(preferHighRes = true): Promise<THREE.Texture> {
-  return loadJupiterCloudMapUrl(preferHighRes ? JUPITER_CLOUD_MAP_URL : JUPITER_CLOUD_MAP_MOBILE_URL);
+  return loadJupiterCloudMapUrl(preferHighRes ? JUPITER_CLOUD_MAP_URL : JUPITER_CLOUD_MAP_MOBILE_URL).then((tex) => {
+    // Desktop 4K: nearest-mip (no blend between levels) reads crisper on belts/GRS.
+    // Mobile keeps trilinear to avoid shimmer on small screens.
+    if (preferHighRes) {
+      tex.minFilter = THREE.LinearMipmapNearestFilter;
+      tex.needsUpdate = true;
+    }
+    return tex;
+  });
 }
 
 /**
