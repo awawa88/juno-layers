@@ -315,6 +315,10 @@ export class JupiterScene {
   private tiltEnabled = true;
   private tiltBaseBeta: number | null = null;
   private tiltBaseGamma: number | null = null;
+  /** Last accepted phone Δ° (for spike rejection across Euler discontinuities). */
+  private lastTiltDeltaBeta = 0;
+  private lastTiltDeltaGamma = 0;
+  private tiltHaveDelta = false;
   private relativeOrientationSensor: { start: () => void; stop: () => void } | null = null;
   private readonly onDeviceOrientation: (e: DeviceOrientationEvent) => void;
   private readonly onTiltGesture: () => void;
@@ -449,8 +453,8 @@ export class JupiterScene {
         const dy = e.clientY - this.rmbLastY;
         this.rmbLastX = e.clientX;
         this.rmbLastY = e.clientY;
-        // Same ±18° envelope as gyro (radians); mouse nudges accumulate toward the clamp.
-        const maxRad = THREE.MathUtils.degToRad(18);
+        // Same ±30° envelope as gyro (radians); mouse nudges accumulate toward the clamp.
+        const maxRad = THREE.MathUtils.degToRad(30);
         const sens = 0.0016;
         this.tiltTargetY = THREE.MathUtils.clamp(this.tiltTargetY + dx * sens, -maxRad, maxRad);
         this.tiltTargetX = THREE.MathUtils.clamp(this.tiltTargetX + dy * sens, -maxRad, maxRad);
@@ -917,29 +921,62 @@ export class JupiterScene {
     this.hooks.onTourProgress?.(this.focus, Math.min(4, Math.round(this.focus)), active);
   }
 
+  /** Shortest signed degree delta in (−180, 180]. */
+  private static shortestDeg(d: number): number {
+    let x = d % 360;
+    if (x > 180) x -= 360;
+    if (x < -180) x += 360;
+    return x;
+  }
+
   /**
-   * Map device pitch/roll (degrees) → camera orbit (radians), ~1:1 within ±18°.
+   * 1:1 inside ±30°, then soft-saturate toward ±36° (no hard wall / no bounce).
+   * Over-tilt (45°, 90°, …) asymptotes at the soft max instead of snapping.
+   */
+  private static softSaturateDeg(d: number, linearMax = 30, softMax = 36): number {
+    const s = d < 0 ? -1 : 1;
+    const a = Math.abs(d);
+    if (a <= linearMax) return d;
+    const room = softMax - linearMax;
+    return s * (linearMax + room * Math.tanh((a - linearMax) / Math.max(room, 1e-6)));
+  }
+
+  /**
+   * Map device pitch/roll (degrees) → camera orbit (radians), ~1:1 within ±30° then soft toward ±36°.
    * Baseline = first sample (held pose), so values are relative and don’t drift with gravity.
    *
    * iPhone wallpaper / window convention (portrait, phone as a window onto Jupiter):
    * - Tip top of phone toward you (beta↓) → look up → see more of Jupiter’s top (north)
    * - Tip left edge toward you (gamma↓) → look left → see more of Jupiter’s left
-   * (Opposite of “content fixed in space” wallpaper shift; matches “screen is a window.”)
+   *
+   * Over-tilt / Euler wraps: shortest-path Δ°, spike reject (>35° frame jump), soft saturate —
+   * never hard-clamp to the opposite rail (that caused the bounce).
    */
   private applyTiltDegrees(beta: number, gamma: number): void {
     if (!this.tiltEnabled || this.reduce || this.dead) return;
     if (this.tiltBaseBeta == null) {
       this.tiltBaseBeta = beta;
       this.tiltBaseGamma = gamma;
+      this.lastTiltDeltaBeta = 0;
+      this.lastTiltDeltaGamma = 0;
+      this.tiltHaveDelta = false;
     }
-    const maxDeg = 18;
-    const dBeta = THREE.MathUtils.clamp(beta - (this.tiltBaseBeta ?? beta), -maxDeg, maxDeg);
-    const dGamma = THREE.MathUtils.clamp(gamma - (this.tiltBaseGamma ?? gamma), -maxDeg, maxDeg);
-    // Degrees → radians 1:1 (cam-orbit gain is 1 so phone° ≈ viewpoint°)
+    let dBeta = JupiterScene.shortestDeg(beta - (this.tiltBaseBeta ?? beta));
+    let dGamma = JupiterScene.shortestDeg(gamma - (this.tiltBaseGamma ?? gamma));
+    // Gimbal / multi-source discontinuity: ignore this sample rather than flip to the other rail.
+    // Threshold ~95° so fast tips within ±30° (+ soft zone) still count; true Euler wraps (~100°+) drop.
+    if (this.tiltHaveDelta) {
+      if (Math.abs(dBeta - this.lastTiltDeltaBeta) > 95) return;
+      if (Math.abs(dGamma - this.lastTiltDeltaGamma) > 95) return;
+    }
+    this.lastTiltDeltaBeta = dBeta;
+    this.lastTiltDeltaGamma = dGamma;
+    this.tiltHaveDelta = true;
+    dBeta = JupiterScene.softSaturateDeg(dBeta);
+    dGamma = JupiterScene.softSaturateDeg(dGamma);
     this.tiltTargetX = THREE.MathUtils.degToRad(-dBeta);
     this.tiltTargetY = THREE.MathUtils.degToRad(dGamma);
     this.tiltActive = true;
-    // Keep the render loop awake while the device is tilting (idleFps would otherwise skip frames).
     this.lastActiveMs = performance.now();
   }
 
@@ -955,11 +992,10 @@ export class JupiterScene {
   }
 
   private attachOrientationListeners(): void {
-    // Classic events: iOS Safari only has DeviceOrientationEvent (no Generic Sensor API).
-    // Use bubble phase (Safari's documented path). Android may also fire absolute.
+    // Single source only: deviceorientation (relative). Also listening to absolute — or starting
+    // RelativeOrientationSensor in parallel — mixed frames with different bases and bounced
+    // tiltTarget between ±clamp rails when over-tilting.
     window.addEventListener("deviceorientation", this.onDeviceOrientation);
-    window.addEventListener("deviceorientationabsolute", this.onDeviceOrientation);
-    this.startRelativeOrientationSensor();
   }
 
   /**
@@ -1186,6 +1222,9 @@ export class JupiterScene {
       this.tiltTargetY = 0;
       this.tiltBaseBeta = null;
       this.tiltBaseGamma = null;
+      this.tiltHaveDelta = false;
+      this.lastTiltDeltaBeta = 0;
+      this.lastTiltDeltaGamma = 0;
       this.rmbTilting = false;
     } else if (!this.reduce && !this.dead) {
       this.beginTiltParallax();
@@ -2086,8 +2125,8 @@ export class JupiterScene {
       }
       // Tiny FOV breathe with tilt magnitude (~0.4° at full tilt) — depth pop without dolly fight.
       const tiltMag = Math.hypot(this.camOrbitX, this.camOrbitY);
-      // Cap ~0.45° at full ±18° tilt (tiltMag≈0.314)
-      const fovTarget = this.baseFov + Math.min(0.45, tiltMag * 1.4);
+      // Cap ~0.45° at full ±30° tilt (tiltMag≈0.52)
+      const fovTarget = this.baseFov + Math.min(0.45, tiltMag * 0.85);
       if (Math.abs(this.camera.fov - fovTarget) > 0.01) {
         this.camera.fov = fovTarget;
         this.camera.updateProjectionMatrix();
