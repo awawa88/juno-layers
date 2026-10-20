@@ -1801,7 +1801,9 @@ export class JupiterScene {
     }
 
     // Idle breathing sway, device-tilt parallax, or desktop RMB micro-tilt (same tiny envelope).
-    if (!this.reduce && this.introT >= 1) {
+    // Any pointer/wheel input during the intro sets userMoved, which stops the intro from
+    // advancing (introT stays < 1 forever). Treat that as "intro over" so tilt/sway still run.
+    if (!this.reduce && (this.introT >= 1 || this.userMoved)) {
       const tilting = this.tiltActive || this.rmbTilting;
       const ease = 1 - Math.exp(-(tilting ? 5.5 : 1.5) * dt);
       if (tilting) {
