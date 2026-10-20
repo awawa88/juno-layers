@@ -41,3 +41,11 @@ proposal 13937, doi:10.17909/T9G593 —
 https://archive.stsci.edu/hlsps/opal/cycle22/jupiter/hlsp_opal_hst_wfc3-uvis_jupiter-2015a_f395n-f502n-f631n_v1_globalmap.tif
 Credit: NASA, ESA, A. Simon (GSFC), M. Wong (UC Berkeley), and G. Orton (JPL-Caltech); OPAL program.
 Real-ESRGAN © Xintao Wang et al., BSD-3-Clause (https://github.com/xinntao/Real-ESRGAN).
+
+## Star background (`starmap-nasa.webp`, `starmap-nasa-mobile.webp`)
+
+NASA Scientific Visualization Studio, "Deep Star Maps 2020" (SVS 4851, https://svs.gsfc.nasa.gov/4851),
+`starmap_2020_4k.exr` (celestial/equatorial equirectangular, Hipparcos-2, Tycho-2 and Gaia DR2 stars plus
+Milky Way). Converted to sRGB WebP and toned dark (floor subtract 0.008, gain 0.9, gamma 0.7) so Jupiter stays the
+hero: 4096×2048 desktop (high tier), 2048×1024 medium/low tiers.
+Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.

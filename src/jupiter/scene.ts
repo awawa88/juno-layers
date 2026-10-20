@@ -287,6 +287,8 @@ export class JupiterScene {
   private homeDist = 0;
   private swayX = 0;
   private swayY = 0;
+  /** Star depth layers and their parallax gain on the planet tilt/sway. */
+  private starLayers: { group: THREE.Group; k: number }[] = [];
   /** Device-tilt parallax targets (iPhone-camera / wallpaper style), radians. */
   private tiltTargetX = 0;
   private tiltTargetY = 0;
@@ -1440,20 +1442,22 @@ export class JupiterScene {
   private buildStars(): void {
     const sprite = createSpriteTexture();
     this.disposables.push(sprite);
-    const make = (count: number, size: number, spread: number, opacity: number) => {
+    const make = (count: number, size: number, rMin: number, spread: number, opacity: number) => {
       const positions = new Float32Array(count * 3);
       const colors = new Float32Array(count * 3);
       for (let i = 0; i < count; i++) {
-        const r = 34 + Math.random() * spread;
+        const r = rMin + Math.random() * spread;
         const theta = Math.acos(2 * Math.random() - 1);
         const phi = Math.random() * Math.PI * 2;
         positions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
         positions[i * 3 + 1] = r * Math.cos(theta);
         positions[i * 3 + 2] = r * Math.sin(theta) * Math.sin(phi);
+        // Mostly dim, a few brighter: brightness skewed toward faint like a real sky.
+        const b = 0.35 + 0.65 * Math.random() ** 2.2;
         const warm = Math.random();
-        colors[i * 3] = 0.82 + warm * 0.18;
-        colors[i * 3 + 1] = 0.84 + Math.random() * 0.12;
-        colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
+        colors[i * 3] = (0.82 + warm * 0.18) * b;
+        colors[i * 3 + 1] = (0.84 + Math.random() * 0.12) * b;
+        colors[i * 3 + 2] = (0.9 + Math.random() * 0.1) * b;
       }
       const geo = this.track(new THREE.BufferGeometry());
       geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -1470,11 +1474,43 @@ export class JupiterScene {
           sizeAttenuation: true,
         }),
       );
-      this.scene.add(new THREE.Points(geo, mat));
+      const layer = new THREE.Group();
+      layer.add(new THREE.Points(geo, mat));
+      this.scene.add(layer);
+      return layer;
     };
+    // Far layer: NASA SVS Deep Star Maps 2020 (real all-sky photo-catalog render), toned dark
+    // so Jupiter stays the hero. Inverted sphere well inside the camera far plane.
+    const sky = new THREE.Group();
+    const skyMat = this.trackMat(
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, depthWrite: false, transparent: true, opacity: 0 }),
+    );
+    const skyMesh = new THREE.Mesh(this.track(new THREE.SphereGeometry(150, 64, 32)), skyMat);
+    skyMesh.renderOrder = -10;
+    sky.add(skyMesh);
+    this.scene.add(sky);
+    const skyUrl = this.quality.tier === "high" ? "/textures/starmap-nasa.webp" : "/textures/starmap-nasa-mobile.webp";
+    new THREE.TextureLoader().load(skyUrl, (tex) => {
+      if (this.dead) {
+        tex.dispose();
+        return;
+      }
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      this.disposables.push(tex);
+      skyMat.map = tex;
+      skyMat.opacity = 1;
+      skyMat.needsUpdate = true;
+    });
     const [faint, bright] = this.quality.stars;
-    make(faint, 0.22, 95, 0.72);
-    make(bright, 0.48, 55, 0.85);
+    // Three depth layers; frame() turns each by a different fraction of the existing tilt/sway
+    // so the planet reads as floating in front (far barely moves, near moves most).
+    this.starLayers = [
+      { group: sky, k: 0.12 },
+      { group: make(faint, 0.26, 95, 40, 0.7), k: 0.2 },
+      { group: make(faint, 0.2, 55, 30, 0.85), k: 0.45 },
+      { group: make(bright * 2, 0.3, 34, 14, 0.95), k: 1.0 },
+    ];
   }
 
   private buildMotes(): THREE.Points {
@@ -1827,6 +1863,10 @@ export class JupiterScene {
     }
     this.planetGroup.rotation.y = this.swayY;
     this.planetGroup.rotation.x = this.swayX;
+    for (const layer of this.starLayers) {
+      layer.group.rotation.y = -this.swayY * layer.k;
+      layer.group.rotation.x = -this.swayX * layer.k;
+    }
 
     if (this.viewOff.distanceToSquared(this.viewOffTarget) > 0.04) {
       this.viewOff.lerp(this.viewOffTarget, 1 - Math.exp(-7 * dt));
