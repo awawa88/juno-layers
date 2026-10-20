@@ -61,6 +61,8 @@ type Shell = {
 };
 
 const OUTER = 2.18;
+/** Max distance the pan target may drift from Jupiter's centre (≈ one planet radius). */
+const PAN_MAX = 2.0;
 
 /** World azimuth of the Great Red Spot (longitude π/2 − 0.18 seen from +Z). */
 const GRS_AZ = 0.18;
@@ -241,6 +243,7 @@ export class JupiterScene {
   private readonly ndc = new THREE.Vector2();
   private readonly tmp = new THREE.Vector3();
   private readonly homeTarget = new THREE.Vector3();
+  private readonly panFix = new THREE.Vector3();
   private readonly desiredPos = new THREE.Vector3();
   // Earth-based (Hubble-like) illumination: the sun sits ~10° up-left of the camera in camera space,
   // re-expressed in world space every frame so the visible disk stays nearly fully lit at any orbit.
@@ -382,6 +385,12 @@ export class JupiterScene {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.enablePan = false;
+    // 3D off: right-drag pans (mouse only). Panning is in screen space and clamped in frame().
+    this.controls.screenSpacePanning = true;
+    this.controls.panSpeed = 0.8;
+    // Runs before OrbitControls' own pointerdown (capture): pan only for mouse, so touch
+    // two-finger stays dolly-only as before.
+    canvas.addEventListener("pointerdown", this.onPanGate, { capture: true });
     this.controls.minDistance = 2.85;
     this.controls.maxDistance = 16;
     this.controls.minPolarAngle = 0.08;
@@ -512,6 +521,7 @@ export class JupiterScene {
 
     // Tilt: Android/auto attach on load; iOS permission on first *page* gesture (not Jupiter-only).
     this.tiltEnabled = JupiterScene.readTiltPref();
+    this.syncRightButton();
     this.beginTiltParallax();
   }
 
@@ -653,7 +663,7 @@ export class JupiterScene {
             this.controls.minDistance,
             this.controls.maxDistance,
           );
-          this.camZoomTo.copy(this.controls.target).add(curOffset.normalize().multiplyScalar(targetDist));
+          this.camZoomTo.copy(this.homeTarget).add(curOffset.normalize().multiplyScalar(targetDist));
         }
         this.camZoomT = 0;
       }
@@ -1050,9 +1060,20 @@ export class JupiterScene {
   }
 
   /** Toggle device + desktop RMB micro-tilt. Persists in localStorage. */
+  /** 3D on: RMB = micro-tilt (OrbitControls ignores it). 3D off: original OrbitControls default (PAN). */
+  private syncRightButton(): void {
+    this.controls.mouseButtons.RIGHT = this.tiltEnabled ? (-1 as unknown as THREE.MOUSE) : THREE.MOUSE.PAN;
+    if (this.tiltEnabled) this.controls.enablePan = false;
+  }
+
+  private readonly onPanGate = (e: PointerEvent) => {
+    this.controls.enablePan = !this.tiltEnabled && e.pointerType === "mouse";
+  };
+
   setTiltEnabled(on: boolean): void {
     if (this.tiltEnabled === on) return;
     this.tiltEnabled = on;
+    this.syncRightButton();
     try {
       window.localStorage.setItem(JupiterScene.TILT_PREF_KEY, on ? "1" : "0");
     } catch {
@@ -1091,6 +1112,7 @@ export class JupiterScene {
     this.renderer.setAnimationLoop(null);
     window.clearTimeout(this.lostTimer);
     this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
+    this.canvas.removeEventListener("pointerdown", this.onPanGate, true);
     this.canvas.removeEventListener("webglcontextrestored", this.onContextRestored);
     for (const type of ["pointerdown", "pointermove", "wheel", "touchstart"] as const) {
       this.canvas.removeEventListener(type, this.onActivity);
@@ -1895,6 +1917,25 @@ export class JupiterScene {
       this.applyViewOffset(this.canvas.clientWidth, this.canvas.clientHeight);
     }
 
+    // Pan target: clamp so Jupiter can't leave the screen; ease home when 3D is on (tilt pivots on
+    // Jupiter's centre), during the tour, and during Restore / peel camera moves.
+    {
+      const toHome = this.panFix.copy(this.homeTarget).sub(this.controls.target);
+      const len = toHome.length();
+      if (len > 1e-4) {
+        if (this.tiltEnabled || this.touring || this.camZoomT < 1) {
+          toHome.multiplyScalar(1 - Math.exp(-4 * dt));
+          this.controls.target.add(toHome);
+          if (!this.touring && this.camZoomT >= 1) this.camera.position.add(toHome);
+        } else if (len > PAN_MAX) {
+          toHome.setLength(len - PAN_MAX);
+          this.controls.target.add(toHome);
+          this.camera.position.add(toHome);
+        }
+      } else if (len > 0) {
+        this.controls.target.copy(this.homeTarget);
+      }
+    }
     this.controls.update();
     this.sunU.value.copy(this.sunCam).applyQuaternion(this.camera.quaternion);
     // Viewpoint micro-orbit (spatial-photo feel): swing the camera a few degrees around the
