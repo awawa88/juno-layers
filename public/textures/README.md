@@ -52,20 +52,29 @@ Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia D
 
 # Mars textures
 
-`mars-viking.webp` / `mars-viking-mobile.webp` — equirectangular Mars albedo (2048×1024 / 1024×512 WebP)
-used by the Mars peel. Sourced from Solar System Scope’s 2k Mars map (CC BY 4.0), itself derived from
-NASA / USGS Viking color mosaics and related public datasets.
+`mars-viking-mdim.webp` / `mars-viking-mdim-mobile.webp` — equirectangular Mars albedo
+(2048×1024 / 1024×512 WebP) for the Mars peel. Direct NASA / JPL / USGS Viking Orbiter
+Colorized MDIM 2.1 global mosaic (2.5 km/pixel source, Lanczos to web tiers).
 
-Source download: https://www.solarsystemscope.com/textures/download/2k_mars.jpg
-License: Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/).
-Underlying spacecraft data: NASA / USGS (public domain). Credit: Solar System Scope; NASA / USGS Viking.
+Source: Viking Orbiter Colorized Mars Digital Image Model (MDIM) 2.1 —
+https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m
+Web-sized mirror used for download (USGS full mosaic host was unavailable): Planetary Society
+Bruce Murray Space Image Library, 8536×4268 PNG/JPEG of the same MDIM 2.1 product —
+https://www.planetary.org/space-images/color-map-of-mars-viking-mdim-2-1
+Credit: NASA / JPL / USGS. Public domain (US government work).
+Replaces the earlier Solar System Scope CC-BY stand-in.
 
 # Sun textures
 
-`sun-photosphere.webp` / `sun-photosphere-mobile.webp` — stylized photosphere equirectangular map
-(2048×1024 / 1024×512 WebP) for the Sun peel’s outermost shell. **Not a solid surface** — the
-photosphere is the visible layer of plasma where light escapes.
+`sun-hmi.webp` / `sun-hmi-mobile.webp` — Carrington synoptic continuum-intensity map of the
+photosphere (2048×1024 / 1024×512 WebP) for the Sun peel’s outermost shell. **Not a solid
+surface** — the photosphere is the visible plasma layer where light escapes.
 
-Source download: https://www.solarsystemscope.com/textures/download/2k_sun.jpg
-License: Creative Commons Attribution 4.0. Credit: Solar System Scope (based on public solar imagery).
-A future pass may swap in an SDO / HMI intensitygram if preferred.
+Source: SDO / HMI continuum intensity synoptic chart for Carrington Rotation 2146
+(limb-darkening removed intensitygrams `hmi.Ic_noLimbDark_720s`, display JPEG from Stanford JSOC docs) —
+http://hmi.stanford.edu/~yliu/hmi/docs/ContinuumIntensity_Synoptic_charts.html
+http://hmi.stanford.edu/~yliu/hmi/docs/Icsynoptic_CR2146.jpg
+Axes are Carrington longitude × sine-latitude; cropped of chart margins, padded to 2:1, and
+Lanczos-resized for the web. Slight color/contrast polish only — no invented granulation.
+Credit: NASA / SDO / HMI / Stanford JSOC. Public domain (US government work).
+Replaces the earlier Solar System Scope CC-BY photosphere stand-in.

@@ -23,4 +23,4 @@ The Moon beside it uses a NASA LROC WAC color map (CGI Moon Kit / SVS 4720, 2k).
 
 Jupiter’s cloud deck uses a Hubble OPAL global map (Jan 2015 Rotation 1), lightly resized. Credit: NASA, ESA, A. Simon (GSFC), M. Wong (UC Berkeley), G. Orton (JPL-Caltech).
 
-Mars peel albedo is Solar System Scope 2k Mars (CC BY 4.0; NASA/USGS Viking lineage). Sun photosphere map is Solar System Scope 2k Sun (CC BY 4.0) — not a solid surface.
+Mars peel albedo is NASA/JPL/USGS Viking Colorized MDIM 2.1 (public domain). Sun photosphere map is SDO/HMI continuum intensity synoptic CR2146 (NASA/SDO/HMI/JSOC; public domain) — not a solid surface.
