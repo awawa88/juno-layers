@@ -149,7 +149,7 @@ export class PeelScene {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure =
-      config.id === "sun" ? 1.15 : config.id === "earth" ? 1.18 : 1.0;
+      config.id === "sun" ? 1.15 : config.id === "earth" ? 1.32 : 1.0;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality.pixelRatio));
 
     this.camera = new THREE.PerspectiveCamera(36, 1, 0.05, 220);
@@ -403,7 +403,7 @@ export class PeelScene {
   private hazeSoft(): THREE.Vector3 {
     switch (this.config.id) {
       case "earth":
-        return new THREE.Vector3(0.14, 0.28, 0.48);
+        return new THREE.Vector3(0.10, 0.22, 0.42);
       case "mars":
         return new THREE.Vector3(0.16, 0.11, 0.09);
       case "moon":
@@ -418,7 +418,7 @@ export class PeelScene {
   private hazeTip(): THREE.Vector3 {
     switch (this.config.id) {
       case "earth":
-        return new THREE.Vector3(0.02, 0.05, 0.12);
+        return new THREE.Vector3(0.02, 0.06, 0.18);
       case "mars":
         return new THREE.Vector3(0.015, 0.01, 0.008);
       case "moon":
@@ -433,7 +433,7 @@ export class PeelScene {
   private glowColor(): THREE.Vector3 {
     switch (this.config.id) {
       case "earth":
-        return new THREE.Vector3(0.12, 0.48, 1.6);
+        return new THREE.Vector3(0.22, 0.52, 1.55);
       case "mars":
         return new THREE.Vector3(0.72, 0.42, 0.28);
       case "moon":
@@ -459,9 +459,9 @@ export class PeelScene {
         uDisp: { value: opts.disp ?? 0 },
         uHazeSoft: { value: this.hazeSoft() },
         uHazeTip: { value: this.hazeTip() },
-        uDayBias: { value: this.config.id === "earth" ? 0.72 : 0.0 },
+        uDayBias: { value: this.config.id === "earth" ? 0.92 : 0.0 },
         uLimbTight: { value: this.config.id === "earth" ? 1.0 : 0.0 },
-        uGlowGain: { value: this.config.id === "earth" ? 2.2 : 1.0 },
+        uGlowGain: { value: this.config.id === "earth" ? 3.6 : 1.0 },
         uOceanSpec: { value: 0 },
         ...extras,
       },
@@ -595,7 +595,7 @@ export class PeelScene {
           {
             uMap: surfaceMap,
             uEmitBoost: { value: this.config.id === "sun" ? 0.35 : 0.0 },
-            uOceanSpec: { value: this.config.id === "earth" ? 1.55 : 0.0 },
+            uOceanSpec: { value: this.config.id === "earth" ? 1.75 : 0.0 },
           },
           { side: THREE.FrontSide },
         );
@@ -614,7 +614,7 @@ export class PeelScene {
         {
           mat: shellMat,
           // Earth atmo: keep face clear so the electric limb (fresnel+glow) reads thin.
-          base: isAtmo && this.config.id === "earth" ? 0.72 : 1,
+          base: isAtmo && this.config.id === "earth" ? 0.22 : 1,
           alwaysTransparent: isAtmo,
         },
       ];
@@ -709,7 +709,7 @@ export class PeelScene {
     );
     const glowSegs = this.quality.segs.glow;
     const glow = new THREE.Mesh(
-      this.track(new THREE.SphereGeometry(this.outer + (this.config.id === "earth" ? 0.022 : 0.035), glowSegs[0], glowSegs[1])),
+      this.track(new THREE.SphereGeometry(this.outer + (this.config.id === "earth" ? 0.0025 : 0.035), glowSegs[0], glowSegs[1])),
       glowMat,
     );
     glow.renderOrder = 6;

@@ -63,8 +63,11 @@ vec3 ballLit(vec3 albedo, vec3 n, float emitBoost) {
   vec3 sun = normalize(uSun);
   float muGeo = clamp(dot(n, view), 0.0, 1.0);
   float w = max(fwidth(muGeo), 1e-4);
-  float hazeEdge = pow(smoothstep(0.0, 0.48 + w * 10.0, muGeo), 1.35);
-  float tipAmt = pow(1.0 - hazeEdge, 1.85);
+  // Earth day-bias: steeper silhouette so surface doesn't pad a soft blue halo.
+  float hazeStart = mix(0.48, 0.16, uDayBias);
+  float hazePow = mix(1.35, 3.0, uDayBias);
+  float hazeEdge = pow(smoothstep(0.0, hazeStart + w * 10.0, muGeo), hazePow);
+  float tipAmt = pow(1.0 - hazeEdge, mix(1.85, 4.0, uDayBias));
   float wrap = mix(0.7, 0.42, uDayBias);
   float fill = mix(0.3, 0.62, uDayBias);
   float mu0 = clamp(dot(n, sun) * wrap + fill, 0.0, 1.0);
@@ -146,7 +149,7 @@ void main() {
     vec2(duy, dFdy(v)) * mipSharp
   ).rgb;
   // Daylight exposure lift for Starship-cam Earth (no-op when uDayBias=0).
-  albedo *= 1.0 + 0.10 * uDayBias;
+  albedo *= 1.0 + 0.16 * uDayBias;
 
   vec3 n = normalize(vNrm);
   if (!gl_FrontFacing) {
@@ -170,8 +173,8 @@ void main() {
     float spec = pow(ndh, 56.0) * ocean * uOceanSpec;
     float fres = pow(1.0 - clamp(dot(n, view), 0.0, 1.0), 2.2);
     lit += vec3(0.55, 0.75, 1.0) * spec * (0.55 + 0.45 * fres);
-    // Slight cyan lift on open water (Flight 14 ocean).
-    lit = mix(lit, lit * vec3(0.92, 1.05, 1.18), ocean * 0.22 * uDayBias);
+    // Deeper royal-blue open water (Flight 14 ref-B).
+    lit = mix(lit, lit * vec3(0.78, 0.95, 1.28), ocean * 0.40 * uDayBias);
   }
   finish(lit, uOpacity);
 }
@@ -203,14 +206,14 @@ void main() {
   vec3 n = normalize(vNrm);
   vec3 view = normalize(cameraPosition - vWorld);
   float mu = clamp(abs(dot(n, view)), 0.0, 1.0);
-  float power = mix(2.8, 5.0, uLimbTight);
+  // Earth (uLimbTight): Flight-14 ~44:00 razor electric-blue limb into black space.
+  float power = mix(2.8, 18.0, uLimbTight);
   float fres = pow(1.0 - mu, power);
-  float day = clamp(dot(n, normalize(uSun)) * mix(0.55, 0.35, uLimbTight) + mix(0.45, 0.65, uLimbTight), 0.0, 1.0);
-  // Face stays nearly clear; glow concentrates at the limb (not a thick bubble).
-  vec3 col = uColor * mix(0.25 + 0.75 * day, 0.55 + 1.15 * day, uLimbTight);
-  float face = mix(0.04, 0.015, uLimbTight);
-  float rim = mix(0.78, 0.98, uLimbTight);
-  float alpha = uOpacity * (face + rim * fres) * mix(0.5 + 0.5 * day, 0.35 + 0.65 * day, uLimbTight);
+  float day = clamp(dot(n, normalize(uSun)) * mix(0.55, 0.18, uLimbTight) + mix(0.45, 0.82, uLimbTight), 0.0, 1.0);
+  vec3 col = uColor * mix(0.25 + 0.75 * day, 0.85 + 1.55 * day, uLimbTight);
+  float face = mix(0.04, 0.0005, uLimbTight);
+  float rim = mix(0.78, 1.55, uLimbTight);
+  float alpha = uOpacity * (face + rim * fres) * mix(0.5 + 0.5 * day, 0.18 + 0.82 * day, uLimbTight);
   finish(col, alpha);
 }
 `;
@@ -273,17 +276,17 @@ varying vec3 vNrm;
 uniform vec3 uSun;
 uniform float uOpacity;
 uniform vec3 uGlowCol;
-/** Scales AA fringe; Earth uses ~2.4 for Flight-14 electric limb. */
+/** Scales AA fringe; Earth uses ~2.8 for Flight-14 razor electric limb. */
 uniform float uGlowGain;
 void main() {
   vec3 n = normalize(vNrm);
   vec3 view = normalize(cameraPosition - vWorld);
   vec3 sun = normalize(uSun);
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  float fres = pow(1.0 - ndv, mix(8.5, 14.0, step(1.5, uGlowGain))) * smoothstep(0.0, 0.08, ndv);
+  float fres = pow(1.0 - ndv, mix(8.5, 42.0, step(1.5, uGlowGain))) * smoothstep(0.0, 0.016, ndv);
   float sunlit = mix(0.55, 1.0, smoothstep(-0.40, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  gl_FragColor = vec4(uGlowCol, rim * 0.018 * uGlowGain);
+  gl_FragColor = vec4(uGlowCol, rim * 0.032 * uGlowGain);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
