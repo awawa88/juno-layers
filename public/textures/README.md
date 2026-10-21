@@ -1,10 +1,23 @@
 # Earth textures
 
-`earth-blue-marble.webp` — NASA Blue Marble (land surface, shallow water, and shaded topography),
-resized to 1024×512 with a baked land/ocean alpha mask for specular oceans and city lights.
+`earth-blue-marble.webp` / `earth-blue-marble-mobile.webp` — NASA Blue Marble with ocean color,
+sea ice and clouds (Visible Earth 57735), resized to **2048×1024** (desktop) and **1024×512**
+(mobile). Mild daylight exposure / ocean cyan lift for a Starship Flight 14 coast-cam look
+(open-ocean specular is shader-side; no invented science claims).
 
-Source: NASA Visible Earth image 57752 (https://visibleearth.nasa.gov/images/57752/blue-marble-land-surface-shallow-water-and-shaded-topography).
+Source: NASA Visible Earth image 57735
+(https://visibleearth.nasa.gov/images/57735/the-blue-marble-land-surface-ocean-color-sea-ice-and-clouds),
+`land_ocean_ice_cloud_2048.jpg`.
 Credit: NASA Earth Observatory / NASA Goddard Space Flight Center. Public domain.
+
+`earth-clouds.webp` / `earth-clouds-desktop.webp` — translucent cloud shell (alpha from NASA
+Blue Marble clouds), 1024×512 / 2048×1024. Decorative only — not a peel layer.
+
+Source: NASA Visible Earth image 57747 (https://visibleearth.nasa.gov/images/57747/blue-marble-clouds),
+`cloud_combined_2048.jpg`.
+Credit: NASA Earth Observatory / NASA Goddard Space Flight Center. Public domain.
+
+Replaces the earlier 57752 land-surface-only bake (dark oceans, no clouds).
 
 # Moon textures
 

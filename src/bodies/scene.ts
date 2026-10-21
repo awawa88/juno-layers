@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { BodyConfig } from "@/bodies/types";
-import { ATMO_FRAG, GLOW_FRAG, SECTION_FRAG, SOLID_FRAG, SURFACE_FRAG, VERT } from "@/bodies/shaders";
+import { ATMO_FRAG, CLOUD_FRAG, GLOW_FRAG, SECTION_FRAG, SOLID_FRAG, SURFACE_FRAG, VERT } from "@/bodies/shaders";
 import { loadBodyAlbedo, placeholderAlbedo } from "@/bodies/texture";
 import { detectQualityTier, qualityProfile, type QualityProfile } from "@/jupiter/quality";
 
@@ -49,12 +49,15 @@ export class PeelScene {
   private readonly timer = new THREE.Timer();
   private readonly quality: QualityProfile = qualityProfile(detectQualityTier());
   private readonly timeU: THREE.IUniform<number> = { value: 0 };
-  private readonly sunU: THREE.IUniform<THREE.Vector3> = { value: new THREE.Vector3(0.35, 0.55, 0.75).normalize() };
+  private readonly sunU: THREE.IUniform<THREE.Vector3> = {
+    value: new THREE.Vector3(0.35, 0.55, 0.75).normalize(),
+  };
   private readonly shells: Shell[] = [];
   private readonly pickables: THREE.Mesh[] = [];
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private readonly mats: THREE.ShaderMaterial[] = [];
   private glow: THREE.Mesh | null = null;
+  private cloudShell: THREE.Mesh | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
   private readonly tmp = new THREE.Vector3();
@@ -125,6 +128,10 @@ export class PeelScene {
   ) {
     this.outer = config.outer;
     this.maxLayer = Math.max(0, config.layers.length - 1);
+    // Flight 14 coast-cam: keep closed Earth on the bright dayside.
+    if (config.id === "earth") {
+      this.sunU.value.set(0.55, 0.35, 0.75).normalize();
+    }
 
     const renderer = new THREE.WebGLRenderer({
       canvas,
@@ -141,7 +148,8 @@ export class PeelScene {
     renderer.setClearColor(0x05060a, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = config.id === "sun" ? 1.15 : 1.0;
+    renderer.toneMappingExposure =
+      config.id === "sun" ? 1.15 : config.id === "earth" ? 1.18 : 1.0;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality.pixelRatio));
 
     this.camera = new THREE.PerspectiveCamera(36, 1, 0.05, 220);
@@ -170,6 +178,8 @@ export class PeelScene {
 
     this.build();
     this.glow = this.buildGlow();
+    // Clouds are baked into earth-blue-marble (57735). Extra shell double-stacked and washed out the hero.
+    // if (this.config.id === "earth") this.cloudShell = this.buildCloudShell();
     this.buildStars();
     this.applyFrame();
     this.camera.position.copy(this.homePos);
@@ -393,7 +403,7 @@ export class PeelScene {
   private hazeSoft(): THREE.Vector3 {
     switch (this.config.id) {
       case "earth":
-        return new THREE.Vector3(0.1, 0.14, 0.22);
+        return new THREE.Vector3(0.14, 0.28, 0.48);
       case "mars":
         return new THREE.Vector3(0.16, 0.11, 0.09);
       case "moon":
@@ -408,7 +418,7 @@ export class PeelScene {
   private hazeTip(): THREE.Vector3 {
     switch (this.config.id) {
       case "earth":
-        return new THREE.Vector3(0.01, 0.012, 0.02);
+        return new THREE.Vector3(0.02, 0.05, 0.12);
       case "mars":
         return new THREE.Vector3(0.015, 0.01, 0.008);
       case "moon":
@@ -423,7 +433,7 @@ export class PeelScene {
   private glowColor(): THREE.Vector3 {
     switch (this.config.id) {
       case "earth":
-        return new THREE.Vector3(0.32, 0.55, 0.95);
+        return new THREE.Vector3(0.12, 0.48, 1.6);
       case "mars":
         return new THREE.Vector3(0.72, 0.42, 0.28);
       case "moon":
@@ -449,6 +459,10 @@ export class PeelScene {
         uDisp: { value: opts.disp ?? 0 },
         uHazeSoft: { value: this.hazeSoft() },
         uHazeTip: { value: this.hazeTip() },
+        uDayBias: { value: this.config.id === "earth" ? 0.72 : 0.0 },
+        uLimbTight: { value: this.config.id === "earth" ? 1.0 : 0.0 },
+        uGlowGain: { value: this.config.id === "earth" ? 2.2 : 1.0 },
+        uOceanSpec: { value: 0 },
         ...extras,
       },
       defines: { QUALITY: this.quality.level, FBM_OCTAVES: this.quality.fbmOctaves },
@@ -581,6 +595,7 @@ export class PeelScene {
           {
             uMap: surfaceMap,
             uEmitBoost: { value: this.config.id === "sun" ? 0.35 : 0.0 },
+            uOceanSpec: { value: this.config.id === "earth" ? 1.55 : 0.0 },
           },
           { side: THREE.FrontSide },
         );
@@ -595,7 +610,14 @@ export class PeelScene {
         );
       }
 
-      const slots: MatSlot[] = [{ mat: shellMat, base: 1, alwaysTransparent: isAtmo }];
+      const slots: MatSlot[] = [
+        {
+          mat: shellMat,
+          // Earth atmo: keep face clear so the electric limb (fresnel+glow) reads thin.
+          base: isAtmo && this.config.id === "earth" ? 0.72 : 1,
+          alwaysTransparent: isAtmo,
+        },
+      ];
       let cutaway:
         | {
             innerRadius: number;
@@ -687,13 +709,48 @@ export class PeelScene {
     );
     const glowSegs = this.quality.segs.glow;
     const glow = new THREE.Mesh(
-      this.track(new THREE.SphereGeometry(this.outer + 0.035, glowSegs[0], glowSegs[1])),
+      this.track(new THREE.SphereGeometry(this.outer + (this.config.id === "earth" ? 0.022 : 0.035), glowSegs[0], glowSegs[1])),
       glowMat,
     );
     glow.renderOrder = 6;
     glow.scale.set(1, this.config.flatten, 1);
     this.scene.add(glow);
     return glow;
+  }
+
+  /** Decorative NASA cloud shell — not a peel layer; fades with atmosphere. */
+  private buildCloudShell(): THREE.Mesh {
+    const mobile = this.quality.tier !== "high";
+    const url = mobile ? "/textures/earth-clouds.webp" : "/textures/earth-clouds-desktop.webp";
+    const preview = placeholderAlbedo([1, 1, 1]);
+    this.track(preview);
+    const mapU: THREE.IUniform<THREE.Texture> = { value: preview };
+    loadBodyAlbedo(url).then(
+      (tex) => {
+        if (this.dead) {
+          tex.dispose();
+          return;
+        }
+        this.track(tex);
+        mapU.value = tex;
+      },
+      (err) => console.warn("Earth clouds failed", err),
+    );
+    const mat = this.makeMat(
+      CLOUD_FRAG,
+      { uMap: mapU },
+      { transparent: true, side: THREE.DoubleSide, blending: THREE.NormalBlending },
+    );
+    mat.depthWrite = false;
+    const segs = this.quality.segs.shell;
+    // Sit just above crust (2.0), under exaggerated atmosphere shell.
+    const mesh = new THREE.Mesh(
+      this.track(new THREE.SphereGeometry(2.02, segs[0], segs[1])),
+      mat,
+    );
+    mesh.renderOrder = 1;
+    this.planetGroup.add(mesh);
+    return mesh;
   }
 
   private buildStars(): void {
@@ -904,6 +961,14 @@ export class PeelScene {
       const grow = 1 + peel * 0.04;
       this.glow.scale.set(grow, this.config.flatten * grow, grow);
       this.glow.rotation.copy(this.planetGroup.rotation);
+    }
+    if (this.cloudShell) {
+      const outer = this.shells[0];
+      const peel = outer?.peel ?? 0;
+      const cloudFade = 1 - smoothstep(0.0, 0.55, peel);
+      const cloudMat = this.cloudShell.material as THREE.ShaderMaterial;
+      cloudMat.uniforms.uOpacity!.value = cloudFade * 0.92;
+      this.cloudShell.visible = cloudFade > 0.04;
     }
 
     this.renderer.render(this.scene, this.camera);

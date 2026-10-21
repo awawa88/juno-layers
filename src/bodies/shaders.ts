@@ -54,6 +54,8 @@ uniform float uOpacity;
 uniform float uPeel;
 uniform vec3 uHazeSoft;
 uniform vec3 uHazeTip;
+/** 0 = Jupiter-style night ball; 1 = Starship-cam daylight fill (Earth). */
+uniform float uDayBias;
 ${NOISE}
 /** Jupiter-style lit-ball: wrap terminator + limb darkening + silhouette haze tip. */
 vec3 ballLit(vec3 albedo, vec3 n, float emitBoost) {
@@ -63,9 +65,12 @@ vec3 ballLit(vec3 albedo, vec3 n, float emitBoost) {
   float w = max(fwidth(muGeo), 1e-4);
   float hazeEdge = pow(smoothstep(0.0, 0.48 + w * 10.0, muGeo), 1.35);
   float tipAmt = pow(1.0 - hazeEdge, 1.85);
-  float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
-  float limbDark = mix(0.30, 1.0, pow(smoothstep(0.0, 0.62 + w * 8.0, muGeo), 0.85));
-  float terminator = pow(mu0, 0.75);
+  float wrap = mix(0.7, 0.42, uDayBias);
+  float fill = mix(0.3, 0.62, uDayBias);
+  float mu0 = clamp(dot(n, sun) * wrap + fill, 0.0, 1.0);
+  float limbFloor = mix(0.30, 0.55, uDayBias);
+  float limbDark = mix(limbFloor, 1.0, pow(smoothstep(0.0, 0.62 + w * 8.0, muGeo), 0.85));
+  float terminator = pow(mu0, mix(0.75, 0.55, uDayBias));
 
   vec3 lit;
   if (emitBoost > 0.05) {
@@ -74,10 +79,13 @@ vec3 ballLit(vec3 albedo, vec3 n, float emitBoost) {
     lit = albedo * (0.72 + emitBoost) * sunLimb;
     lit = mix(uHazeSoft * 1.15, lit, hazeEdge * 0.88 + 0.12);
   } else {
-    lit = albedo * (0.025 + 1.06 * terminator) * limbDark;
+    float amb = mix(0.025, 0.14, uDayBias);
+    float gain = mix(1.06, 1.22, uDayBias);
+    lit = albedo * (amb + gain * terminator) * limbDark;
     vec3 haze = mix(uHazeSoft, uHazeTip, tipAmt);
     vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
-    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.28);
+    float desat = mix(0.28, 0.08, uDayBias);
+    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * desat);
     lit = mix(haze, mid, hazeEdge);
   }
   return lit;
@@ -113,6 +121,8 @@ export const SURFACE_FRAG = /* glsl */ `
 ${PRELUDE}
 uniform sampler2D uMap;
 uniform float uEmitBoost;
+/** Glassy ocean specular strength (Earth Starship-cam look; 0 elsewhere). */
+uniform float uOceanSpec;
 void main() {
   vec3 dir = normalize(vObj);
   float lat = asin(clamp(dir.y, -1.0, 1.0));
@@ -135,6 +145,8 @@ void main() {
     vec2(dux, dFdx(v)) * mipSharp,
     vec2(duy, dFdy(v)) * mipSharp
   ).rgb;
+  // Daylight exposure lift for Starship-cam Earth (no-op when uDayBias=0).
+  albedo *= 1.0 + 0.10 * uDayBias;
 
   vec3 n = normalize(vNrm);
   if (!gl_FrontFacing) {
@@ -145,7 +157,23 @@ void main() {
     finish(ballLit(innerCol, n, 0.0) * 0.85, uOpacity);
     return;
   }
-  finish(ballLit(albedo, n, uEmitBoost), uOpacity);
+  vec3 lit = ballLit(albedo, n, uEmitBoost);
+  if (uOceanSpec > 0.001) {
+    float lum = dot(albedo, vec3(0.299, 0.587, 0.114));
+    // Blue-dominant, not cloud-white → ocean for glassy specular.
+    float ocean = smoothstep(0.02, 0.12, albedo.b - max(albedo.r, albedo.g) * 0.92)
+      * (1.0 - smoothstep(0.55, 0.82, lum));
+    vec3 view = normalize(cameraPosition - vWorld);
+    vec3 sun = normalize(uSun);
+    vec3 h = normalize(sun + view);
+    float ndh = max(dot(n, h), 0.0);
+    float spec = pow(ndh, 56.0) * ocean * uOceanSpec;
+    float fres = pow(1.0 - clamp(dot(n, view), 0.0, 1.0), 2.2);
+    lit += vec3(0.55, 0.75, 1.0) * spec * (0.55 + 0.45 * fres);
+    // Slight cyan lift on open water (Flight 14 ocean).
+    lit = mix(lit, lit * vec3(0.92, 1.05, 1.18), ocean * 0.22 * uDayBias);
+  }
+  finish(lit, uOpacity);
 }
 `;
 
@@ -169,15 +197,20 @@ void main() {
 export const ATMO_FRAG = /* glsl */ `
 ${PRELUDE}
 uniform vec3 uColor;
+/** >0.5 → Starship thin electric-blue limb (Earth); Mars stays soft. */
+uniform float uLimbTight;
 void main() {
   vec3 n = normalize(vNrm);
   vec3 view = normalize(cameraPosition - vWorld);
   float mu = clamp(abs(dot(n, view)), 0.0, 1.0);
-  float fres = pow(1.0 - mu, 2.8);
-  float day = clamp(dot(n, normalize(uSun)) * 0.55 + 0.45, 0.0, 1.0);
+  float power = mix(2.8, 5.0, uLimbTight);
+  float fres = pow(1.0 - mu, power);
+  float day = clamp(dot(n, normalize(uSun)) * mix(0.55, 0.35, uLimbTight) + mix(0.45, 0.65, uLimbTight), 0.0, 1.0);
   // Face stays nearly clear; glow concentrates at the limb (not a thick bubble).
-  vec3 col = uColor * (0.25 + 0.75 * day);
-  float alpha = uOpacity * (0.04 + 0.78 * fres) * (0.5 + 0.5 * day);
+  vec3 col = uColor * mix(0.25 + 0.75 * day, 0.55 + 1.15 * day, uLimbTight);
+  float face = mix(0.04, 0.015, uLimbTight);
+  float rim = mix(0.78, 0.98, uLimbTight);
+  float alpha = uOpacity * (face + rim * fres) * mix(0.5 + 0.5 * day, 0.35 + 0.65 * day, uLimbTight);
   finish(col, alpha);
 }
 `;
@@ -240,16 +273,44 @@ varying vec3 vNrm;
 uniform vec3 uSun;
 uniform float uOpacity;
 uniform vec3 uGlowCol;
+/** Scales AA fringe; Earth uses ~2.4 for Flight-14 electric limb. */
+uniform float uGlowGain;
 void main() {
   vec3 n = normalize(vNrm);
   vec3 view = normalize(cameraPosition - vWorld);
   vec3 sun = normalize(uSun);
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  float fres = pow(1.0 - ndv, 8.5) * smoothstep(0.0, 0.12, ndv);
+  float fres = pow(1.0 - ndv, mix(8.5, 14.0, step(1.5, uGlowGain))) * smoothstep(0.0, 0.08, ndv);
   float sunlit = mix(0.55, 1.0, smoothstep(-0.40, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  gl_FragColor = vec4(uGlowCol, rim * 0.018);
+  gl_FragColor = vec4(uGlowCol, rim * 0.018 * uGlowGain);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+}
+`;
+
+/** Thin translucent cloud shell (Earth only) — NASA Blue Marble clouds alpha. */
+export const CLOUD_FRAG = /* glsl */ `
+${PRELUDE}
+uniform sampler2D uMap;
+void main() {
+  vec3 dir = normalize(vObj);
+  float lat = asin(clamp(dir.y, -1.0, 1.0));
+  float lon = atan(dir.z, dir.x);
+  float u = lon / 6.28318530718 + 0.5;
+  float v = clamp(lat / 3.14159265359 + 0.5, 0.002, 0.998);
+  vec4 cloud = texture(uMap, vec2(u, v));
+  float dens = cloud.a;
+  if (dens < 0.04) discard;
+  vec3 n = normalize(vNrm);
+  if (!gl_FrontFacing) n = -n;
+  vec3 sun = normalize(uSun);
+  float day = clamp(dot(n, sun) * 0.45 + 0.55, 0.0, 1.0);
+  vec3 view = normalize(cameraPosition - vWorld);
+  float mu = clamp(dot(n, view), 0.0, 1.0);
+  // Fluffy white rows; slight cool tint at limb like Starship cams.
+  vec3 col = mix(vec3(0.92, 0.95, 1.0), vec3(1.0), dens) * (0.55 + 0.55 * day);
+  float alpha = uOpacity * dens * dens * (0.55 + 0.35 * day) * smoothstep(0.0, 0.15, mu);
+  finish(col, alpha);
 }
 `;
