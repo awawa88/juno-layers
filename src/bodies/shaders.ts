@@ -64,16 +64,16 @@ vec3 ballLit(vec3 albedo, vec3 n, float emitBoost) {
   float muGeo = clamp(dot(n, view), 0.0, 1.0);
   float w = max(fwidth(muGeo), 1e-4);
   // Earth day-bias: steeper silhouette so surface doesn't pad a soft blue halo.
-  float hazeStart = mix(0.48, 0.16, uDayBias);
-  float hazePow = mix(1.35, 3.0, uDayBias);
+  float hazeStart = mix(0.48, 0.10, uDayBias);
+  float hazePow = mix(1.35, 4.2, uDayBias);
   float hazeEdge = pow(smoothstep(0.0, hazeStart + w * 10.0, muGeo), hazePow);
-  float tipAmt = pow(1.0 - hazeEdge, mix(1.85, 4.0, uDayBias));
-  float wrap = mix(0.7, 0.42, uDayBias);
-  float fill = mix(0.3, 0.62, uDayBias);
+  float tipAmt = pow(1.0 - hazeEdge, mix(1.85, 5.5, uDayBias));
+  float wrap = mix(0.7, 0.34, uDayBias);
+  float fill = mix(0.3, 0.72, uDayBias);
   float mu0 = clamp(dot(n, sun) * wrap + fill, 0.0, 1.0);
-  float limbFloor = mix(0.30, 0.55, uDayBias);
-  float limbDark = mix(limbFloor, 1.0, pow(smoothstep(0.0, 0.62 + w * 8.0, muGeo), 0.85));
-  float terminator = pow(mu0, mix(0.75, 0.55, uDayBias));
+  float limbFloor = mix(0.30, 0.62, uDayBias);
+  float limbDark = mix(limbFloor, 1.0, pow(smoothstep(0.0, 0.55 + w * 8.0, muGeo), 0.72));
+  float terminator = pow(mu0, mix(0.75, 0.48, uDayBias));
 
   vec3 lit;
   if (emitBoost > 0.05) {
@@ -82,8 +82,8 @@ vec3 ballLit(vec3 albedo, vec3 n, float emitBoost) {
     lit = albedo * (0.72 + emitBoost) * sunLimb;
     lit = mix(uHazeSoft * 1.15, lit, hazeEdge * 0.88 + 0.12);
   } else {
-    float amb = mix(0.025, 0.14, uDayBias);
-    float gain = mix(1.06, 1.22, uDayBias);
+    float amb = mix(0.025, 0.18, uDayBias);
+    float gain = mix(1.06, 1.38, uDayBias);
     lit = albedo * (amb + gain * terminator) * limbDark;
     vec3 haze = mix(uHazeSoft, uHazeTip, tipAmt);
     vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
@@ -149,7 +149,7 @@ void main() {
     vec2(duy, dFdy(v)) * mipSharp
   ).rgb;
   // Daylight exposure lift for Starship-cam Earth (no-op when uDayBias=0).
-  albedo *= 1.0 + 0.16 * uDayBias;
+  albedo *= 1.0 + 0.24 * uDayBias;
 
   vec3 n = normalize(vNrm);
   if (!gl_FrontFacing) {
@@ -170,11 +170,11 @@ void main() {
     vec3 sun = normalize(uSun);
     vec3 h = normalize(sun + view);
     float ndh = max(dot(n, h), 0.0);
-    float spec = pow(ndh, 56.0) * ocean * uOceanSpec;
-    float fres = pow(1.0 - clamp(dot(n, view), 0.0, 1.0), 2.2);
-    lit += vec3(0.55, 0.75, 1.0) * spec * (0.55 + 0.45 * fres);
-    // Deeper royal-blue open water (Flight 14 ref-B).
-    lit = mix(lit, lit * vec3(0.78, 0.95, 1.28), ocean * 0.40 * uDayBias);
+    float spec = pow(ndh, 72.0) * ocean * uOceanSpec;
+    float fres = pow(1.0 - clamp(dot(n, view), 0.0, 1.0), 2.4);
+    lit += vec3(0.50, 0.78, 1.05) * spec * (0.50 + 0.50 * fres);
+    // Deeper saturated royal ocean (Flight 14 coast-cam).
+    lit = mix(lit, lit * vec3(0.68, 0.92, 1.38), ocean * 0.58 * uDayBias);
   }
   finish(lit, uOpacity);
 }
@@ -206,14 +206,14 @@ void main() {
   vec3 n = normalize(vNrm);
   vec3 view = normalize(cameraPosition - vWorld);
   float mu = clamp(abs(dot(n, view)), 0.0, 1.0);
-  // Earth (uLimbTight): Flight-14 ~44:00 razor electric-blue limb into black space.
-  float power = mix(2.8, 18.0, uLimbTight);
+  // Earth (uLimbTight): Flight-14 razor electric-blue hairline into black space.
+  float power = mix(2.8, 32.0, uLimbTight);
   float fres = pow(1.0 - mu, power);
-  float day = clamp(dot(n, normalize(uSun)) * mix(0.55, 0.18, uLimbTight) + mix(0.45, 0.82, uLimbTight), 0.0, 1.0);
-  vec3 col = uColor * mix(0.25 + 0.75 * day, 0.85 + 1.55 * day, uLimbTight);
-  float face = mix(0.04, 0.0005, uLimbTight);
-  float rim = mix(0.78, 1.55, uLimbTight);
-  float alpha = uOpacity * (face + rim * fres) * mix(0.5 + 0.5 * day, 0.18 + 0.82 * day, uLimbTight);
+  float day = clamp(dot(n, normalize(uSun)) * mix(0.55, 0.12, uLimbTight) + mix(0.45, 0.88, uLimbTight), 0.0, 1.0);
+  vec3 col = uColor * mix(0.25 + 0.75 * day, 1.05 + 1.85 * day, uLimbTight);
+  float face = mix(0.04, 0.00012, uLimbTight);
+  float rim = mix(0.78, 2.05, uLimbTight);
+  float alpha = uOpacity * (face + rim * fres) * mix(0.5 + 0.5 * day, 0.10 + 0.90 * day, uLimbTight);
   finish(col, alpha);
 }
 `;
@@ -283,10 +283,10 @@ void main() {
   vec3 view = normalize(cameraPosition - vWorld);
   vec3 sun = normalize(uSun);
   float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
-  float fres = pow(1.0 - ndv, mix(8.5, 42.0, step(1.5, uGlowGain))) * smoothstep(0.0, 0.016, ndv);
+  float fres = pow(1.0 - ndv, mix(8.5, 64.0, step(1.5, uGlowGain))) * smoothstep(0.0, 0.010, ndv);
   float sunlit = mix(0.55, 1.0, smoothstep(-0.40, 0.25, dot(n, sun)));
   float rim = fres * sunlit * uOpacity;
-  gl_FragColor = vec4(uGlowCol, rim * 0.032 * uGlowGain);
+  gl_FragColor = vec4(uGlowCol, rim * 0.038 * uGlowGain);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -312,8 +312,8 @@ void main() {
   vec3 view = normalize(cameraPosition - vWorld);
   float mu = clamp(dot(n, view), 0.0, 1.0);
   // Fluffy white rows; slight cool tint at limb like Starship cams.
-  vec3 col = mix(vec3(0.92, 0.95, 1.0), vec3(1.0), dens) * (0.55 + 0.55 * day);
-  float alpha = uOpacity * dens * dens * (0.55 + 0.35 * day) * smoothstep(0.0, 0.15, mu);
+  vec3 col = mix(vec3(0.95, 0.97, 1.0), vec3(1.08), dens) * (0.62 + 0.58 * day);
+  float alpha = uOpacity * dens * dens * (0.62 + 0.40 * day) * smoothstep(0.0, 0.12, mu);
   finish(col, alpha);
 }
 `;
