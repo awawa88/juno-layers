@@ -1,4 +1,6 @@
-/** Shared peel shaders for Earth / Mars / Moon / Sun (Jupiter keeps its own). */
+/** Shared peel shaders for Earth / Mars / Moon / Sun (Jupiter keeps its own).
+ * Lighting matches Jupiter cloud deck: terminator wrap, limb darkening, ball-shadow rim haze.
+ */
 
 const NOISE = /* glsl */ `
 float hash13(vec3 p) {
@@ -50,7 +52,36 @@ uniform float uTime;
 uniform vec3 uSun;
 uniform float uOpacity;
 uniform float uPeel;
+uniform vec3 uHazeSoft;
+uniform vec3 uHazeTip;
 ${NOISE}
+/** Jupiter-style lit-ball: wrap terminator + limb darkening + silhouette haze tip. */
+vec3 ballLit(vec3 albedo, vec3 n, float emitBoost) {
+  vec3 view = normalize(cameraPosition - vWorld);
+  vec3 sun = normalize(uSun);
+  float muGeo = clamp(dot(n, view), 0.0, 1.0);
+  float w = max(fwidth(muGeo), 1e-4);
+  float hazeEdge = pow(smoothstep(0.0, 0.48 + w * 10.0, muGeo), 1.35);
+  float tipAmt = pow(1.0 - hazeEdge, 1.85);
+  float mu0 = clamp(dot(n, sun) * 0.7 + 0.3, 0.0, 1.0);
+  float limbDark = mix(0.30, 1.0, pow(smoothstep(0.0, 0.62 + w * 8.0, muGeo), 0.85));
+  float terminator = pow(mu0, 0.75);
+
+  vec3 lit;
+  if (emitBoost > 0.05) {
+    // Self-lit photosphere: limb darkening without a dark night side.
+    float sunLimb = mix(0.52, 1.0, pow(smoothstep(0.0, 0.88 + w * 6.0, muGeo), 0.72));
+    lit = albedo * (0.72 + emitBoost) * sunLimb;
+    lit = mix(uHazeSoft * 1.15, lit, hazeEdge * 0.88 + 0.12);
+  } else {
+    lit = albedo * (0.025 + 1.06 * terminator) * limbDark;
+    vec3 haze = mix(uHazeSoft, uHazeTip, tipAmt);
+    vec3 gray = vec3(dot(lit, vec3(0.299, 0.587, 0.114)));
+    vec3 mid = mix(lit, gray, (1.0 - hazeEdge) * 0.28);
+    lit = mix(haze, mid, hazeEdge);
+  }
+  return lit;
+}
 void finish(vec3 col, float alpha) {
   gl_FragColor = vec4(col, alpha);
   #include <tonemapping_fragment>
@@ -92,14 +123,29 @@ void main() {
   float duy = dFdy(u);
   dux -= floor(dux + 0.5);
   duy -= floor(duy + 0.5);
-  vec3 albedo = textureGrad(uMap, vec2(u, v), vec2(dux, dFdx(v)), vec2(duy, dFdy(v))).rgb;
+  // Mild mip sharpen (Jupiter cloud deck family) so albedo reads less “plastic flat”.
+#if QUALITY > 1
+  const float mipSharp = 0.35;
+#else
+  const float mipSharp = 0.55;
+#endif
+  vec3 albedo = textureGrad(
+    uMap,
+    vec2(u, v),
+    vec2(dux, dFdx(v)) * mipSharp,
+    vec2(duy, dFdy(v)) * mipSharp
+  ).rgb;
 
   vec3 n = normalize(vNrm);
-  vec3 sun = normalize(uSun);
-  float ndl = clamp(dot(n, sun) * 0.75 + 0.25, 0.0, 1.0);
-  vec3 col = albedo * (0.06 + 1.05 * pow(ndl, 0.9));
-  col += albedo * uEmitBoost;
-  finish(col, uOpacity);
+  if (!gl_FrontFacing) {
+    n = -n;
+    vec3 view = normalize(cameraPosition - vWorld);
+    float rim = 1.0 - clamp(dot(n, view), 0.0, 1.0);
+    vec3 innerCol = albedo * (0.55 + 0.45 * rim);
+    finish(ballLit(innerCol, n, 0.0) * 0.85, uOpacity);
+    return;
+  }
+  finish(ballLit(albedo, n, uEmitBoost), uOpacity);
 }
 `;
 
@@ -111,26 +157,27 @@ uniform float uEmis;
 void main() {
   vec3 n = normalize(vNrm);
   if (!gl_FrontFacing) n = -n;
-  vec3 sun = normalize(uSun);
-  float ndl = clamp(dot(n, sun) * 0.65 + 0.35, 0.0, 1.0);
   float grain = noise(vObj * 6.0) * 0.08;
-  vec3 col = uColor * (0.12 + 0.95 * ndl + grain);
+  vec3 albedo = uColor * (1.0 + grain);
+  vec3 col = ballLit(albedo, n, 0.0);
   col += uColor * uEmis;
   finish(col, uOpacity);
 }
 `;
 
-/** Thin translucent atmosphere shell. */
+/** Thin translucent atmosphere shell — limb-weighted like Jupiter’s Rayleigh fringe. */
 export const ATMO_FRAG = /* glsl */ `
 ${PRELUDE}
 uniform vec3 uColor;
 void main() {
   vec3 n = normalize(vNrm);
   vec3 view = normalize(cameraPosition - vWorld);
-  float fres = pow(1.0 - clamp(abs(dot(n, view)), 0.0, 1.0), 2.2);
-  float day = clamp(dot(n, normalize(uSun)) * 0.5 + 0.5, 0.0, 1.0);
-  vec3 col = uColor * (0.35 + 0.65 * day);
-  float alpha = uOpacity * (0.22 + 0.55 * fres);
+  float mu = clamp(abs(dot(n, view)), 0.0, 1.0);
+  float fres = pow(1.0 - mu, 2.8);
+  float day = clamp(dot(n, normalize(uSun)) * 0.55 + 0.45, 0.0, 1.0);
+  // Face stays nearly clear; glow concentrates at the limb (not a thick bubble).
+  vec3 col = uColor * (0.25 + 0.75 * day);
+  float alpha = uOpacity * (0.04 + 0.78 * fres) * (0.5 + 0.5 * day);
   finish(col, alpha);
 }
 `;
@@ -149,6 +196,8 @@ uniform vec3 uInnerCol;
 uniform vec3 uOuterCol;
 uniform float uEmis;
 uniform float uPeel;
+uniform vec3 uHazeSoft;
+uniform vec3 uHazeTip;
 ${NOISE}
 
 void main() {
@@ -171,11 +220,35 @@ void main() {
   vec3 n = normalize(vNrm);
   if (!gl_FrontFacing) n = -n;
   vec3 sun = normalize(uSun);
-  float ndl = clamp(dot(n, sun) * 0.65 + 0.35, 0.0, 1.0);
-  vec3 col = base * (vec3(0.10, 0.09, 0.11) + vec3(1.08, 1.0, 0.92) * ndl);
+  vec3 view = normalize(cameraPosition - vWorld);
+  float mu = clamp(dot(n, view), 0.0, 1.0);
+  float ndl = clamp(dot(n, sun) * 0.62 + 0.38, 0.0, 1.0);
+  float limb = mix(0.42, 1.0, pow(smoothstep(0.0, 0.7, mu), 0.85));
+  vec3 col = base * (vec3(0.08, 0.07, 0.09) + vec3(1.12, 1.02, 0.94) * ndl) * limb;
   col += uInnerCol * uEmis * (1.0 - t * 0.6) * (0.9 + 0.2 * sin(uTime * 1.6 + t * 5.0));
 
   gl_FragColor = vec4(col, uOpacity);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`;
+
+/** Outer atmospheric AA fringe (Jupiter GLOW_FRAG family; tinted per body). */
+export const GLOW_FRAG = /* glsl */ `
+varying vec3 vWorld;
+varying vec3 vNrm;
+uniform vec3 uSun;
+uniform float uOpacity;
+uniform vec3 uGlowCol;
+void main() {
+  vec3 n = normalize(vNrm);
+  vec3 view = normalize(cameraPosition - vWorld);
+  vec3 sun = normalize(uSun);
+  float ndv = clamp(abs(dot(n, view)), 0.0, 1.0);
+  float fres = pow(1.0 - ndv, 8.5) * smoothstep(0.0, 0.12, ndv);
+  float sunlit = mix(0.55, 1.0, smoothstep(-0.40, 0.25, dot(n, sun)));
+  float rim = fres * sunlit * uOpacity;
+  gl_FragColor = vec4(uGlowCol, rim * 0.018);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

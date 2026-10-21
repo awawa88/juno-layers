@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { BodyConfig } from "@/bodies/types";
-import { ATMO_FRAG, SECTION_FRAG, SOLID_FRAG, SURFACE_FRAG, VERT } from "@/bodies/shaders";
+import { ATMO_FRAG, GLOW_FRAG, SECTION_FRAG, SOLID_FRAG, SURFACE_FRAG, VERT } from "@/bodies/shaders";
 import { loadBodyAlbedo, placeholderAlbedo } from "@/bodies/texture";
 import { detectQualityTier, qualityProfile, type QualityProfile } from "@/jupiter/quality";
 
@@ -54,6 +54,7 @@ export class PeelScene {
   private readonly pickables: THREE.Mesh[] = [];
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private readonly mats: THREE.ShaderMaterial[] = [];
+  private glow: THREE.Mesh | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
   private readonly tmp = new THREE.Vector3();
@@ -168,6 +169,7 @@ export class PeelScene {
     canvas.addEventListener("pointerdown", this.onPanGate, { capture: true });
 
     this.build();
+    this.glow = this.buildGlow();
     this.buildStars();
     this.applyFrame();
     this.camera.position.copy(this.homePos);
@@ -381,10 +383,55 @@ export class PeelScene {
     this.applyFrame();
   }
 
+  private hazeSoft(): THREE.Vector3 {
+    switch (this.config.id) {
+      case "earth":
+        return new THREE.Vector3(0.1, 0.14, 0.22);
+      case "mars":
+        return new THREE.Vector3(0.16, 0.11, 0.09);
+      case "moon":
+        return new THREE.Vector3(0.1, 0.1, 0.1);
+      case "sun":
+        return new THREE.Vector3(1.0, 0.55, 0.22);
+      default:
+        return new THREE.Vector3(0.12, 0.11, 0.105);
+    }
+  }
+
+  private hazeTip(): THREE.Vector3 {
+    switch (this.config.id) {
+      case "earth":
+        return new THREE.Vector3(0.01, 0.012, 0.02);
+      case "mars":
+        return new THREE.Vector3(0.015, 0.01, 0.008);
+      case "moon":
+        return new THREE.Vector3(0.008, 0.008, 0.008);
+      case "sun":
+        return new THREE.Vector3(0.85, 0.35, 0.08);
+      default:
+        return new THREE.Vector3(0.012, 0.011, 0.01);
+    }
+  }
+
+  private glowColor(): THREE.Vector3 {
+    switch (this.config.id) {
+      case "earth":
+        return new THREE.Vector3(0.32, 0.55, 0.95);
+      case "mars":
+        return new THREE.Vector3(0.72, 0.42, 0.28);
+      case "moon":
+        return new THREE.Vector3(0.45, 0.44, 0.42);
+      case "sun":
+        return new THREE.Vector3(1.0, 0.62, 0.28);
+      default:
+        return new THREE.Vector3(0.42, 0.38, 0.34);
+    }
+  }
+
   private makeMat(
     fragment: string,
     extras: Record<string, THREE.IUniform> = {},
-    opts: { transparent?: boolean; side?: THREE.Side; disp?: number } = {},
+    opts: { transparent?: boolean; side?: THREE.Side; blending?: THREE.Blending; disp?: number } = {},
   ): THREE.ShaderMaterial {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
@@ -393,6 +440,8 @@ export class PeelScene {
         uOpacity: { value: 1 },
         uPeel: { value: 0 },
         uDisp: { value: opts.disp ?? 0 },
+        uHazeSoft: { value: this.hazeSoft() },
+        uHazeTip: { value: this.hazeTip() },
         ...extras,
       },
       defines: { QUALITY: this.quality.level, FBM_OCTAVES: this.quality.fbmOctaves },
@@ -401,6 +450,8 @@ export class PeelScene {
       side: opts.side ?? THREE.FrontSide,
       transparent: opts.transparent ?? false,
       depthWrite: !(opts.transparent ?? false),
+      blending: opts.blending ?? THREE.NormalBlending,
+      premultipliedAlpha: false,
     });
     return this.trackMat(mat);
   }
@@ -621,6 +672,23 @@ export class PeelScene {
     }
   }
 
+  private buildGlow(): THREE.Mesh {
+    const glowMat = this.makeMat(
+      GLOW_FRAG,
+      { uGlowCol: { value: this.glowColor() } },
+      { transparent: true, blending: THREE.AdditiveBlending, side: THREE.BackSide },
+    );
+    const glowSegs = this.quality.segs.glow;
+    const glow = new THREE.Mesh(
+      this.track(new THREE.SphereGeometry(this.outer + 0.035, glowSegs[0], glowSegs[1])),
+      glowMat,
+    );
+    glow.renderOrder = 6;
+    glow.scale.set(1, this.config.flatten, 1);
+    this.scene.add(glow);
+    return glow;
+  }
+
   private buildStars(): void {
     const count = this.quality.stars[0];
     const positions = new Float32Array(count * 3);
@@ -816,6 +884,19 @@ export class PeelScene {
         if (target < 0.999) shell.group.visible = true;
         else if (shell.peel > 0.992) shell.group.visible = false;
       }
+    }
+
+    // Jupiter-style outer glow fades as the outermost shell peels away.
+    if (this.glow) {
+      const outer = this.shells[0];
+      const peel = outer?.peel ?? 0;
+      const glowFade = 1 - smoothstep(0.0, 0.5, peel);
+      const glowMat = this.glow.material as THREE.ShaderMaterial;
+      glowMat.uniforms.uOpacity!.value = glowFade;
+      this.glow.visible = glowFade > 0.02;
+      const grow = 1 + peel * 0.04;
+      this.glow.scale.set(grow, this.config.flatten * grow, grow);
+      this.glow.rotation.copy(this.planetGroup.rotation);
     }
 
     this.renderer.render(this.scene, this.camera);
