@@ -297,11 +297,18 @@ export class PeelScene {
   private applyFrame(): void {
     const w = this.canvas.clientWidth || 1;
     const h = this.canvas.clientHeight || 1;
-    const { top, right, bottom } = this.frameSpec;
-    const freeW = Math.max(1, w - right);
-    const freeH = Math.max(1, h - top - bottom);
-    const aspect = freeW / freeH;
-    this.camera.aspect = aspect;
+    if (w < 2 || h < 2) return;
+    const { mode, top, right, bottom } = this.frameSpec;
+    // Keep canvas aspect (w/h). Using freeW/freeH here stretched the silhouette into a
+    // tall oval on phone portrait while the renderer still drew the full canvas.
+    this.baseFov = mode === "phone" ? 42 : 36;
+    this.camera.fov = this.baseFov;
+    this.camera.aspect = w / h;
+    // Shift frustum into the HUD-free panel the same way JupiterScene does.
+    const ox = right / 2;
+    const oy = (bottom - top) / 2;
+    if (Math.abs(ox) > 0.5 || Math.abs(oy) > 0.5) this.camera.setViewOffset(w, h, ox, oy, w, h);
+    else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
     // Frame so the planet fills the free area similarly at focus 0.
     const dist = this.homePos.length();
